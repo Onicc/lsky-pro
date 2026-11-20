@@ -6,7 +6,6 @@ use App\Enums\Watermark\Mode;
 use App\Models\Image;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\File;
 
 class MediaThumbnails
 {
@@ -45,8 +44,12 @@ class MediaThumbnails
 
     private function generate(Image $image, Collection $settings, string $target): void
     {
-        File::ensureDirectoryExists(dirname($target));
-        $temporaryPath = tempnam(dirname($target), 'thumbnail-');
+        $directory = dirname($target);
+        if (! is_dir($directory) && ! @mkdir($directory, 0755, true) && ! is_dir($directory)) {
+            throw new \RuntimeException('Cannot create thumbnail directory');
+        }
+
+        $temporaryPath = tempnam($directory, 'thumbnail-');
         if ($temporaryPath === false) {
             throw new \RuntimeException('Cannot create thumbnail work file');
         }

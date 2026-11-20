@@ -162,7 +162,7 @@ upload_png() {
 }
 
 upload_url() {
-    jq -er 'if .status == true then .data.links.url else error(.message // "Upload failed") end'
+    jq -er --arg link "${1:-url}" 'if .status == true then .data.links[$link] else error(.message // "Upload failed") end'
 }
 
 check_png() {
@@ -182,9 +182,43 @@ check_png() {
     ' "$expected" "${3:-40}" "${4:-40}" < "$work/download.png"
 }
 
+check_thumbnail() {
+    "${compose[@]}" exec -T app php -r '
+        $body = stream_get_contents(STDIN);
+        $size = getimagesizefromstring($body);
+        $image = imagecreatefromstring($body);
+        if (!$size || $size["mime"] !== "image/webp" || $size[0] !== 40 || $size[1] !== 40 || !$image) {
+            exit(1);
+        }
+
+        $expected = (int) $argv[1];
+        $actual = imagecolorsforindex($image, imagecolorat($image, 20, 20));
+        foreach (["red" => 16, "green" => 8, "blue" => 0] as $channel => $shift) {
+            if (abs($actual[$channel] - (($expected >> $shift) & 255)) > 8) {
+                exit(1);
+            }
+        }
+    ' "$2" < "$1"
+}
+
 make_png 255 > "$work/first.png"
 make_png 16711680 > "$work/second.png"
 make_png 65280 > "$work/third.png"
+
+# Both preview requests start while the shared thumbnails directory is still absent.
+first_thumbnail=$(upload_png "$work/first.png" | upload_url thumbnail_url)
+second_thumbnail=$(upload_png "$work/second.png" | upload_url thumbnail_url)
+[[ "$first_thumbnail" == "$APP_URL/"* && "$second_thumbnail" == "$APP_URL/"* && "$first_thumbnail" != "$second_thumbnail" ]]
+curl --fail --silent --show-error --max-time 15 "$first_thumbnail" -o "$work/first-thumbnail.webp" &
+first_preview=$!
+curl --fail --silent --show-error --max-time 15 "$second_thumbnail" -o "$work/second-thumbnail.webp" &
+second_preview=$!
+preview_status=0
+wait "$first_preview" || preview_status=1
+wait "$second_preview" || preview_status=1
+[[ "$preview_status" == 0 ]]
+check_thumbnail "$work/first-thumbnail.webp" 255
+check_thumbnail "$work/second-thumbnail.webp" 16711680
 
 # A real multi-worker Apache catches SQLite transaction upgrades that single-process tests cannot.
 for _ in {1..4}; do

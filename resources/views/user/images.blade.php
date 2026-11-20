@@ -1,7 +1,6 @@
 @section('title', '我的图片')
 
 @push('styles')
-    <link rel="stylesheet" href="{{ Vite::asset('justified-gallery.css') }}">
     <link rel="stylesheet" href="{{ Vite::asset('viewer.css') }}">
 @endpush
 
@@ -81,7 +80,7 @@
     <div class="relative inset-0 h-full overflow-hidden">
         <!-- content -->
         <div id="images-scroll" class="absolute inset-0 overflow-y-scroll dragselect select-none">
-            <div id="images-grid" class="dragselect"></div>
+            <div id="images-grid" class="dragselect grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6"></div>
         </div>
         <!-- right drawer -->
         <div id="drawer-mask" class="absolute hidden inset-0 bg-gray-500 bg-opacity-50 z-[2]" onclick="drawer.close()"></div>
@@ -95,7 +94,7 @@
     </div>
 
     <script type="text/html" id="images-item-tpl">
-        <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
+        <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative block aspect-square min-w-0 cursor-default rounded bg-gray-100 outline outline-2 outline-offset-2 outline-transparent">
             <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer ">
                 <div class="p-1 text-xl sm:text-2xl">
                     <i class="fas fa-check-circle block rounded-full bg-white text-white border border-gray-500"></i>
@@ -107,7 +106,7 @@
                     <p class="text-xs date" title="__human_date__">__date__</p>
                 </div>
             </div>
-            <img alt="__name__" loading="lazy" data-original="__url__" src="__thumb_url__" width="__width__" height="__height__">
+            <img class="h-full w-full rounded object-cover" alt="__name__" loading="lazy" data-original="__url__" src="__thumb_url__" width="__width__" height="__height__">
         </a>
     </script>
 
@@ -200,21 +199,12 @@
     </script>
 
     @push('scripts')
-        <script src="{{ Vite::asset('justified-gallery.js') }}"></script>
         <script src="{{ Vite::asset('viewer.js') }}"></script>
         <script src="{{ Vite::asset('dragselect.js') }}"></script>
         <script src="{{ Vite::asset('context-menu.js') }}"></script>
         <script src="{{ Vite::asset('clipboard/image.js') }}"></script>
         <script src="{{ Vite::asset('clipboard/clipboard.js') }}"></script>
         <script>
-            let gridConfigs = {
-                rowHeight: 180,
-                margins: 16,
-                captions: false,
-                border: 10,
-                waitThumbnailsLoad: false,
-            };
-
             let selectedAlbum = {}; // 选择的相册
 
             const HEADER_TITLE = '#header-title';
@@ -252,8 +242,6 @@
                 }
             }
 
-            $photos.justifiedGallery(gridConfigs);
-
             let albumsInfinite = null;
             const imagesInfinite = utils.infiniteScroll(IMAGES_SCROLL, {
                 url: '{{ route('user.images') }}',
@@ -288,25 +276,13 @@
                     ds.setSelectables($photos.find(IMAGES_ITEM));
                 },
                 complete: function () {
-                    if ($photos.html() !== '') {
-                        // 由于 justifiedGallery 创建后占高度(无论是否有内容或内容被清空)，导致加载过程中在没有数据的情况下高度被拉开
-                        // 所以需要在重置前销毁，重置数据后重新构建 justifiedGallery
-                        if ($photos.hasClass('reset')) {
-                            $photos.justifiedGallery(gridConfigs).removeClass('reset');
-                        }
-
-                        $photos.justifiedGallery('norewind')
-                        viewer.update();
-                    } else {
-                        // 没有任何数据时销毁 justifiedGallery
-                        $photos.justifiedGallery('destroy')
-                    }
+                    viewer.update();
                     $headerTitle.text('我的图片')
                 }
             });
 
             const resetImages = (params) => {
-                $photos.addClass('reset').html('').justifiedGallery('destroy');
+                $photos.empty();
                 ds.clearSelection();
                 params = $.extend({page: 1}, params)
                 imagesInfinite.refresh(params);
@@ -690,7 +666,7 @@
                                     });
                                     utils.setCapacityProgress(-size);
                                     $headerTitle.text('我的图片');
-                                    $photos.justifiedGallery(gridConfigs).removeClass('reset');
+                                    viewer.update();
                                     toastr.success(response.data.message);
                                 } else {
                                     toastr.warning(response.data.message);

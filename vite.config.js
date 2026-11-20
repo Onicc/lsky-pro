@@ -9,8 +9,6 @@ const pageAssets = {
     'dragselect.js': 'node_modules/dragselect/dist/ds.min.js',
     'echarts.js': 'node_modules/echarts/dist/echarts.min.js',
     'imagesloaded.js': 'node_modules/imagesloaded/imagesloaded.pkgd.min.js',
-    'justified-gallery.css': 'node_modules/justifiedGallery/dist/css/justifiedGallery.min.css',
-    'justified-gallery.js': 'node_modules/justifiedGallery/dist/js/jquery.justifiedGallery.min.js',
     'markdown.css': 'node_modules/github-markdown-css/github-markdown-light.css',
     'masonry.js': 'node_modules/masonry-layout/dist/masonry.pkgd.min.js',
     'viewer.css': 'node_modules/viewerjs/dist/viewer.min.css',

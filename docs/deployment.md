@@ -53,7 +53,7 @@ docker build -t lsky-pro:local .
 scripts/smoke-container.sh lsky-pro:local
 ```
 
-冒烟测试会创建临时 Compose 项目和测试数据，验证安装前后的健康检查、静态资产、Token API、多批同名图片并发上传与逐张读回、计划任务注册和重启持久化。默认使用 SQLite，并校验 8K PNG 的尺寸和像素。附加 `mysql` 或 `pgsql` 参数可验证对应外部数据库。命令结束时清理自己的项目与测试卷。
+冒烟测试会创建临时 Compose 项目和测试数据，验证安装前后的健康检查、静态资产、Token API、同名图片并发上传与逐张读回、首次并发生成缩略图、计划任务注册和重启持久化。默认使用 SQLite，并校验 8K PNG 的尺寸和像素。附加 `mysql` 或 `pgsql` 参数可验证对应外部数据库。命令结束时清理自己的项目与测试卷。
 
 ## 浏览器回归
 

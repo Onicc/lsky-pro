@@ -78,7 +78,10 @@ try {
             assert.match(await list.locator('[data-link]').first().inputValue(), /^!\[red\.png\]\(/);
 
             await page.goto(`${base}/images`);
-            await page.locator('.images-item').first().waitFor();
+            await page.waitForFunction(() => {
+                const previews = Array.from(document.querySelectorAll('#images-grid .images-item img')).slice(0, 2);
+                return previews.length === 2 && previews.every(image => image.complete && image.naturalWidth > 0);
+            });
             assert(await page.getByRole('textbox', { name: '搜索图片' }).isVisible());
             await page.getByRole('textbox', { name: '搜索图片' }).fill('blue.png');
             await page.getByRole('textbox', { name: '搜索图片' }).press('Enter');

@@ -38,7 +38,6 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\URL;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
@@ -596,7 +595,10 @@ class ImageService
         }
 
         $directory = config('image.private_root').'/review';
-        File::ensureDirectoryExists($directory);
+        if (! is_dir($directory) && ! @mkdir($directory, 0755, true) && ! is_dir($directory)) {
+            throw new \RuntimeException('Cannot create moderation work directory');
+        }
+
         $stagedPath = $directory.'/'.$image->key;
         $expiresAt = now()->addMinutes(2);
         $url = URL::temporarySignedRoute('media.review', $expiresAt, ['token' => $image->key]);
