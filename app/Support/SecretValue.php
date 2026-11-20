@@ -6,24 +6,17 @@ use Illuminate\Support\Facades\Crypt;
 
 final class SecretValue
 {
-    private const PREFIX = 'enc:v1:';
-
-    public static function encrypt(?string $value): ?string
+    public static function encrypt(?string $value): array|string|null
     {
-        return $value === null || $value === '' || self::isEncrypted($value)
-            ? $value
-            : self::PREFIX.Crypt::encryptString($value);
+        return $value === null || $value === '' ? $value : ['encrypted' => Crypt::encryptString($value)];
     }
 
-    public static function decrypt(?string $value): ?string
+    public static function decrypt(mixed $value): ?string
     {
-        return $value !== null && self::isEncrypted($value)
-            ? Crypt::decryptString(substr($value, strlen(self::PREFIX)))
-            : $value;
-    }
+        if (is_array($value) && is_string($value['encrypted'] ?? null)) {
+            return Crypt::decryptString($value['encrypted']);
+        }
 
-    public static function isEncrypted(string $value): bool
-    {
-        return str_starts_with($value, self::PREFIX);
+        return is_scalar($value) ? (string) $value : null;
     }
 }

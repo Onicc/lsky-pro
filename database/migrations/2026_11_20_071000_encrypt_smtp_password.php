@@ -30,7 +30,7 @@ return new class extends Migration
         $mail = json_decode($raw, true, flags: JSON_THROW_ON_ERROR);
         $path = 'mailers.smtp.password';
         $password = Arr::get($mail, $path);
-        if (is_string($password) && $password !== '') {
+        if (($encrypt && is_string($password) && $password !== '') || (! $encrypt && is_array($password))) {
             Arr::set($mail, $path, $encrypt ? SecretValue::encrypt($password) : SecretValue::decrypt($password));
             $record->update(['value' => json_encode($mail, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)]);
         }

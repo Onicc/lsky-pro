@@ -95,14 +95,16 @@ class SettingController extends Controller
         $previous = Config::query()->where('name', ConfigKey::Mail)->lockForUpdate()->value('value');
         $mail = json_decode($previous ?? '{}', true, flags: JSON_THROW_ON_ERROR);
         $path = 'mailers.smtp.password';
+        $password = Arr::get($value, $path);
         if (Arr::get($value, 'mailers.smtp.clear_password')) {
             Arr::set($value, $path, null);
-        } elseif (! Arr::get($value, $path)) {
+        } elseif (is_string($password) && $password !== '') {
+            Arr::set($value, $path, SecretValue::encrypt($password));
+        } else {
             Arr::forget($value, $path);
         }
         Arr::forget($value, 'mailers.smtp.clear_password');
         $mail = array_replace_recursive($mail, $value);
-        Arr::set($mail, $path, SecretValue::encrypt(Arr::get($mail, $path)));
 
         return json_encode($mail, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     }

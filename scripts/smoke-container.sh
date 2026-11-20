@@ -154,9 +154,13 @@ make_png() {
 upload_png() {
     curl --fail-with-body --silent --show-error --max-time 20 \
         --header 'Accept: application/json' --header "Authorization: Bearer $token" \
+        --header "Idempotency-Key: $(openssl rand -hex 16)" \
         --form "permission=${2:-2}" \
-        --form "file=@$1;filename=photo.png;type=image/png" "$APP_URL/api/v1/upload" \
-        | jq -er 'select(.status == true).data.links.url'
+        --form "file=@$1;filename=photo.png;type=image/png" "$APP_URL/api/v1/upload"
+}
+
+upload_url() {
+    jq -er 'if .status == true then .data.links.url else error(.message // "Upload failed") end'
 }
 
 check_png() {
@@ -174,12 +178,30 @@ check_png() {
 
 make_png 255 > "$work/first.png"
 make_png 16711680 > "$work/second.png"
-first_url=$(upload_png "$work/first.png")
-second_url=$(upload_png "$work/second.png")
-[[ "$first_url" != "$second_url" ]]
-check_png "$first_url" 255
-check_png "$second_url" 16711680
-private_url=$(upload_png "$work/first.png" 0)
+make_png 65280 > "$work/third.png"
+
+# A real multi-worker Apache catches SQLite transaction upgrades that single-process tests cannot.
+for _ in {1..4}; do
+    uploads=()
+    for sample in first second third; do
+        upload_png "$work/$sample.png" > "$work/$sample-upload.json" &
+        uploads+=("$!")
+    done
+    upload_status=0
+    for pid in "${uploads[@]}"; do
+        wait "$pid" || upload_status=1
+    done
+    [[ "$upload_status" == 0 ]]
+
+    first_url=$(upload_url < "$work/first-upload.json")
+    second_url=$(upload_url < "$work/second-upload.json")
+    third_url=$(upload_url < "$work/third-upload.json")
+    [[ "$first_url" != "$second_url" && "$first_url" != "$third_url" && "$second_url" != "$third_url" ]]
+    check_png "$first_url" 255
+    check_png "$second_url" 16711680
+    check_png "$third_url" 65280
+done
+private_url=$(upload_png "$work/first.png" 0 | upload_url)
 private_status=$(curl --silent --max-time 10 --output /dev/null --write-out '%{http_code}' "$private_url")
 [[ "$private_status" == 404 ]]
 

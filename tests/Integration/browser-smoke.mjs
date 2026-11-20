@@ -54,7 +54,12 @@ try {
             ]);
             await page.getByRole('button', { name: '开始上传' }).click();
             const list = page.getByRole('list', { name: '上传列表' });
-            await list.getByText('上传成功', { exact: true }).nth(1).waitFor();
+            try {
+                await list.getByText('上传成功', { exact: true }).nth(1).waitFor({timeout: 15000});
+            } catch (error) {
+                const states = await list.locator('[data-state]').allTextContents();
+                throw new Error(`Both pictures should upload successfully. Row states: ${states.join(' | ')}`, {cause: error});
+            }
             assert.deepEqual(await list.locator('[data-name]').allTextContents(), ['red.png', 'blue.png']);
             const links = await list.locator('[data-link]').evaluateAll(fields => fields.map(field => field.value));
             assert.equal(new Set(links).size, 2);

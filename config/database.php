@@ -41,6 +41,10 @@ return [
             'database' => env('DB_DATABASE', storage_path('app/lsky.sqlite')),
             'prefix' => '',
             'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
+            'busy_timeout' => 5000,
+            'journal_mode' => 'WAL',
+            // Claim the writer lock before reading quota and reservation state.
+            'transaction_mode' => 'IMMEDIATE',
         ],
 
         'mysql' => [

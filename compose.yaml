@@ -43,7 +43,12 @@ services:
     command: ['php', '-d', 'extension=pcntl', 'artisan', 'schedule:work', '--no-interaction']
     stop_signal: SIGTERM
     healthcheck:
-      disable: true
+      test: ['CMD', 'php', 'artisan', 'schedule:list', '--no-ansi']
+      interval: 60s
+      timeout: 5s
+      start_period: 15s
+      start_interval: 2s
+      retries: 3
     depends_on:
       app:
         condition: service_healthy
