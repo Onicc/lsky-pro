@@ -354,6 +354,11 @@
                             </div>
                         </div>
                     </div>
+                    <div class="px-4 py-3 text-sm sm:px-6">
+                        <x-fieldset-checkbox id="configs-private-objects" name="configs[private_objects]" value="1">
+                            此储存的内部图片路径已禁止匿名读取，可保存私有图片
+                        </x-fieldset-checkbox>
+                    </div>
                     <div class="px-4 py-3 bg-gray-50 text-right sm:px-6">
                         <x-button type="button" class="bg-gray-500" onclick="history.go(-1)">取消</x-button>
                         <x-button>确认创建</x-button>

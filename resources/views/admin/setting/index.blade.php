@@ -1,9 +1,5 @@
 @section('title', '系统设置')
 
-@push('styles')
-    <link rel="stylesheet" href="{{ asset('css/markdown-css/github-markdown-light.css') }}">
-@endpush
-
 <x-app-layout>
     <div class="my-6 md:my-9">
         <p class="mb-3 font-semibold text-lg text-gray-700">通用</p>
@@ -96,7 +92,8 @@
                     </div>
                     <div>
                         <label for="mail[mailers][smtp][password]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>密码</label>
-                        <x-input type="password" name="mail[mailers][smtp][password]" id="mail[mailers][smtp][password]" value="{{ $configs['mail']['mailers']['smtp']['password'] ?? '' }}" placeholder="请输入密码"/>
+                        <x-input type="password" name="mail[mailers][smtp][password]" id="mail[mailers][smtp][password]" autocomplete="new-password" placeholder="留空保留现有密码"/>
+                        <label class="mt-2 inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="mail[mailers][smtp][clear_password]" value="1">清除已保存的密码</label>
                     </div>
                     <div>
                         <label for="mail[mailers][smtp][encryption]" class="block text-sm font-medium text-gray-700">加密方式</label>
@@ -126,36 +123,12 @@
             </div>
         </div>
 
-        <p class="mb-3 font-semibold text-lg text-gray-700">系统升级</p>
-        <div class="relative p-4 rounded-md bg-white mb-8 shadow-custom">
-            <p id="check-update" class="text-gray-600 text-center p-4" style="display: none">
-                <i class="fas fa-cog animate-spin"></i> 正在检查更新...
-            </p>
-            <p id="not-update" class="text-center p-6" style="display: none">
-                <span class="text-gray-700">{{ \App\Utils::config(\App\Enums\ConfigKey::AppVersion) }}</span>
-                <span class="text-gray-500">已是最新版本</span>
-            </p>
-            <div id="have-update" class="break-words" style="display: none"></div>
+        <p class="mb-3 font-semibold text-lg text-gray-700">当前版本</p>
+        <div class="rounded-md bg-white p-4 shadow-sm">
+            <p class="font-medium text-gray-900">Lsky Pro {{ config('lsky.version') }}</p>
+            <a class="mt-2 inline-block text-indigo-700 underline" href="https://github.com/Onicc/lsky-pro/releases">查看发行版本与升级说明</a>
         </div>
     </div>
-
-    <script type="text/html" id="update-tpl">
-        <div class="flex items-center">
-            <img id="icon" src="__icon__" alt="icon" class="rounded-full w-16" style="animation-duration: 5s">
-            <div class="flex flex-col text-gray-700 ml-4">
-                <p class="font-semibold">Lsky Pro __name__</p>
-                <p class="text-sm">__size__</p>
-                <p class="text-sm">发布于 __pushed_at__</p>
-            </div>
-        </div>
-        <p id="upgrade-message" class="mt-4 text-sm text-gray-500"></p>
-        <div class="mt-4 text-sm markdown-body">
-            __changelog__
-        </div>
-        <div class="mt-6 text-right">
-            <a href="javascript:void(0)" id="install" class="rounded-md px-4 py-2 bg-blue-500 text-white">立即安装</a>
-        </div>
-    </script>
 
     @push('scripts')
         <script>
@@ -209,81 +182,6 @@
                 })
             });
 
-            let timer;
-            let upgrade = function () {
-                return {
-                    start: function () {
-                        $('#icon').addClass('animate-spin')
-                        $('#install').attr('disabled', true).removeClass('bg-blue-500').addClass('cursor-not-allowed bg-gray-400').text('执行升级中...')
-                        $('#upgrade-message').text('准备升级...').removeClass('text-red-500').addClass('text-gray-500');
-
-                        timer = setInterval(getProgress, 1500);
-                        axios.post('{{ route('admin.settings.upgrade') }}');
-                    },
-                    stop: function () {
-                        $('#icon').removeClass('animate-spin')
-                        $('#install').attr('disabled', false).removeClass('cursor-not-allowed bg-gray-400').addClass('bg-blue-500').text('立即安装')
-                        clearInterval(timer);
-                    }
-                };
-            };
-
-            let getVersion = function (callback) {
-                $('#check-update').show();
-                axios.get('{{ route('admin.settings.check.update') }}').then(response => {
-                    if (response.data.status && response.data.data.is_update) {
-                        $('#check-update').hide();
-                        let version = response.data.data.version;
-                        let html = $('#update-tpl').html()
-                            .replace(/__icon__/g, version.icon)
-                            .replace(/__name__/g, version.name)
-                            .replace(/__size__/g, version.size)
-                            .replace(/__pushed_at__/g, version.pushed_at)
-                            .replace(/__changelog__/g, version.changelog);
-                        $('#have-update').html(html).show();
-                        $('.markdown-body a').attr('target', '_blank');
-                        callback && callback(version);
-                    } else {
-                        $('#not-update').show();
-                        $('#check-update').hide();
-                    }
-                });
-            }
-
-            let getProgress = function () {
-                axios.get('{{ route('admin.settings.upgrade.progress') }}').then(response => {
-                    $('#upgrade-message').text(response.data.data.message);
-                    if (response.data.data.status === 'success') {
-                        $('#upgrade-message').removeClass('text-gray-500').addClass('text-green-500');
-                        $('#install').hide();
-                    }
-                    if (response.data.data.status === 'fail') {
-                        $('#upgrade-message').removeClass('text-gray-500').addClass('text-red-500');
-                    }
-                    if (response.data.data.status !== 'installing') {
-                        upgrade().stop();
-                    }
-                });
-            };
-
-            $(document).on('click', '#install', function () {
-                if ($(this).attr('disabled')) {
-                    return;
-                }
-                upgrade().start();
-            });
-
-            @if(cache()->has('upgrade_progress'))
-                getVersion(() => {
-                    $('#icon').addClass('animate-spin')
-                    $('#install').attr('disabled', true).removeClass('bg-blue-500').addClass('cursor-not-allowed bg-gray-400').text('正在升级...')
-                    $('#upgrade-message').text('请稍等...').removeClass('text-red-500').addClass('text-gray-500');
-
-                    timer = setInterval(getProgress, 1500);
-                });
-                @else
-                getVersion();
-            @endif
         </script>
     @endpush
 

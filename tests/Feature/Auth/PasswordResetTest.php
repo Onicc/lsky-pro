@@ -4,14 +4,11 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class PasswordResetTest extends TestCase
 {
-    use RefreshDatabase;
-
     public function test_reset_password_link_screen_can_be_rendered()
     {
         $response = $this->get('/forgot-password');
@@ -28,6 +25,16 @@ class PasswordResetTest extends TestCase
         $this->post('/forgot-password', ['email' => $user->email]);
 
         Notification::assertSentTo($user, ResetPassword::class);
+    }
+
+    public function test_password_reset_request_has_the_same_feedback_for_known_and_unknown_accounts(): void
+    {
+        Notification::fake();
+        $user = User::factory()->create();
+        $message = __('If an account exists, you will receive a password reset link.');
+
+        $this->post('/forgot-password', ['email' => $user->email])->assertSessionHas('status', $message);
+        $this->post('/forgot-password', ['email' => 'unregistered@example.test'])->assertSessionHas('status', $message);
     }
 
     public function test_reset_password_screen_can_be_rendered()

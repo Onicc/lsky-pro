@@ -18,7 +18,7 @@ class UserSettingRequest extends FormRequest
             'configs' => 'array',
             'configs.default_album' => 'required|numeric',
             'configs.default_strategy' => 'required|numeric',
-            'configs.default_permission' => 'required|in:1,0',
+            'configs.default_permission' => 'required|in:0,1,2',
             'configs.pasted_action' => 'required|in:1,2',
             'configs.is_auto_clear_preview' => 'nullable|boolean'
         ];

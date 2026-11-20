@@ -17,7 +17,7 @@ Route::get('/register', [
 
 Route::post('/register', [
     RegisteredUserController::class, 'store'
-])->middleware('guest')->middleware(CheckIsEnableRegistration::class);
+])->middleware(['guest', CheckIsEnableRegistration::class, 'throttle:5,1']);
 
 Route::get('/login', [
     AuthenticatedSessionController::class, 'create',
@@ -33,7 +33,7 @@ Route::get('/forgot-password', [
 
 Route::post('/forgot-password', [
     PasswordResetLinkController::class, 'store',
-])->middleware('guest')->name('password.email');
+])->middleware(['guest', 'throttle:5,1'])->name('password.email');
 
 Route::get('/reset-password/{token}', [
     NewPasswordController::class, 'create',

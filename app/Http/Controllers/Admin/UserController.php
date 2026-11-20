@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UserRequest;
 use App\Models\User;
@@ -47,22 +48,27 @@ class UserController extends Controller
         $user = User::query()->findOrFail($request->route('id'));
         $validated = $request->validated();
 
-        if (! empty($validated['password'])) {
+        $passwordChanged = ! empty($validated['password']);
+        if ($passwordChanged) {
             $user->forceFill([
                 'password' => Hash::make($validated['password']),
                 'remember_token' => Str::random(60),
             ]);
 
-            event(new PasswordReset($user));
         }
 
         unset($validated['password']);
         $user->fill($validated);
         $user->group_id = $validated['group_id'];
 
-        if (!$user->save()) {
-            return $this->fail('保存失败');
-        }
+        DB::transaction(function () use ($user, $passwordChanged): void {
+            $user->saveOrFail();
+            if ($passwordChanged) {
+                event(new PasswordReset($user));
+            } elseif ($user->wasChanged('status') && $user->status !== UserStatus::Normal) {
+                $user->tokens()->delete();
+            }
+        });
         return $this->success('保存成功');
     }
 
@@ -73,6 +79,7 @@ class UserController extends Controller
             DB::transaction(function () use ($user) {
                 $user->images()->update(['user_id' => null]);
                 $user->albums()->delete();
+                $user->tokens()->delete();
                 $user->delete();
             });
         }

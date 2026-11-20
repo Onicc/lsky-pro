@@ -1,9 +1,5 @@
 @section('title', '画廊')
 
-@push('styles')
-    <link rel="stylesheet" href="{{ asset('css/gallery.css') }}">
-@endpush
-
 <x-app-layout>
     <div>
         @if($images->isNotEmpty())
@@ -15,13 +11,13 @@
                         @if($image->extension === 'gif')
                             <span class="absolute top-1 right-1 z-[1] bg-white rounded-md text-sm px-1 py-0">Gif</span>
                         @endif
-                        <a target="_blank" href="{{ $image->url }}">
+                        <a target="_blank" rel="noopener noreferrer" href="{{ $image->url }}">
                             <div class="relative overflow-hidden w-full h-32">
-                                <img class="grow object-cover object-center w-full h-full" src="{{ $image->thumb_url }}"/>
+                                <img class="grow object-cover object-center w-full h-full" src="{{ $image->thumb_url }}" alt="{{ $image->filename }}" loading="lazy"/>
                             </div>
                         </a>
-                        <a target="_blank" href="{{ $image->user->url ?: 'javascript:void(0)' }}" class="flex justify-between items-center px-3 py-2 bg-white overflow-hidden group">
-                            <img src="{{ $image->user->avatar }}" class="w-6 h-6 rounded-full">
+                        <a target="_blank" rel="noopener noreferrer" href="{{ $image->user->url ?: 'javascript:void(0)' }}" class="flex justify-between items-center px-3 py-2 bg-white overflow-hidden group">
+                            <img src="{{ $image->user->avatar }}" alt="" loading="lazy" class="w-6 h-6 rounded-full">
                             <p class="ml-2 truncate group-hover:text-blue-500">{{ $image->user->name }}</p>
                         </a>
                     </div>
@@ -35,8 +31,8 @@
     </div>
 
     @push('scripts')
-        <script src="{{ asset('js/masonry/masonry.pkgd.min.js') }}"></script>
-        <script src="{{ asset('js/imagesloaded/imagesloaded.pkgd.min.js') }}"></script>
+        <script src="{{ Vite::asset('masonry.js') }}"></script>
+        <script src="{{ Vite::asset('imagesloaded.js') }}"></script>
         <script>
             var $grid = $('.images-grid').masonry({
                 itemSelector: '.grid-item',

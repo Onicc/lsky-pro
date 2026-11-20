@@ -5,60 +5,42 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Image;
 use App\Models\User;
-use App\Utils;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class ConsoleController extends Controller
 {
     public function index(): View
     {
-        $carbon = Carbon::now();
-        $format = 'Y-m-d H:i:s';
-
+        $today = Carbon::today();
+        $now = now();
+        $yesterday = $today->copy()->subDay();
         $numbers = [
-            'today' => Image::query()->whereBetween('created_at', [$carbon->startOfDay()->format($format), $carbon->endOfDay()->format($format)])->count(),
-            'yesterday' => Image::query()->whereBetween('created_at', [$carbon->yesterday()->startOfDay()->format($format), $carbon->yesterday()->endOfDay()->format($format)])->count(),
-            'week' => Image::query()->whereBetween('created_at', [$carbon->startOfWeek()->format($format), $carbon->endOfWeek()->format($format)])->count(),
-            'month' => Image::query()->whereBetween('created_at', [$carbon->startOfMonth()->format($format), $carbon->endOfMonth()->format($format)])->count(),
+            'today' => Image::query()->whereBetween('created_at', [$today, $now])->count(),
+            'yesterday' => Image::query()->where('created_at', '>=', $yesterday)->where('created_at', '<', $today)->count(),
+            'week' => Image::query()->whereBetween('created_at', [$today->copy()->startOfWeek(), $now])->count(),
+            'month' => Image::query()->whereBetween('created_at', [$today->copy()->startOfMonth(), $now])->count(),
         ];
 
-        $start = Carbon::now()->parse('-30 day')->startOfDay();
-        $end = Carbon::now()->endOfDay();
-        $dates = Utils::makeDateRange($start->format('Y-m-d'), $end->format('Y-m-d'));
+        $start = $today->copy()->subDays(29);
+        $dates = array_map(fn (int $offset): string => $start->copy()->addDays($offset)->toDateString(), range(0, 29));
+        $day = DB::getDriverName() === 'sqlsrv' ? 'CAST(created_at AS DATE)' : 'DATE(created_at)';
+        $uploads = Image::query()->whereBetween('created_at', [$start, $now])
+            ->selectRaw("$day AS chart_day")
+            ->selectRaw('SUM(CASE WHEN user_id IS NULL THEN 1 ELSE 0 END) AS guest_total')
+            ->selectRaw('SUM(CASE WHEN user_id IS NOT NULL THEN 1 ELSE 0 END) AS user_total')
+            ->groupByRaw($day)->get()->keyBy('chart_day');
+        $registrations = User::query()->whereBetween('created_at', [$start, $now])
+            ->selectRaw("$day AS chart_day, COUNT(*) AS total")
+            ->groupByRaw($day)->pluck('total', 'chart_day');
 
         $fields = ['游客上传', '用户上传', '新用户'];
-
-        $images = Image::query()
-            ->whereBetween('created_at', [$start->format($format), $end->format($format)])
-            ->get(['user_id', 'created_at'])
-            ->transform(function (Image $image) {
-                $image['date'] = $image->created_at->format('Y-m-d');
-                return $image;
-            })->groupBy('date');
-
-        $users = User::query()
-            ->whereBetween('created_at', [$start->format($format), $end->format($format)])
-            ->get()
-            ->transform(function (User $user) {
-                $user['date'] = $user->created_at->format('Y-m-d');
-                return $user;
-            })->groupBy('date');
-
-        $data = collect(array_map(fn() => 0, array_flip($dates)));
-        $array = [
-            $data->merge($images->map(fn(Collection $items) => $items->whereNull('user_id')->count())),
-            $data->merge($images->map(fn(Collection $items) => $items->whereNotNull('user_id')->count())),
-            $data->merge($users->map(fn(Collection $items) => $items->count())),
+        $datasets = [
+            ['name' => $fields[0], 'type' => 'line', 'data' => array_map(fn ($date) => (int) ($uploads[$date]->guest_total ?? 0), $dates)],
+            ['name' => $fields[1], 'type' => 'line', 'data' => array_map(fn ($date) => (int) ($uploads[$date]->user_total ?? 0), $dates)],
+            ['name' => $fields[2], 'type' => 'line', 'data' => array_map(fn ($date) => (int) ($registrations[$date] ?? 0), $dates)],
         ];
-        $datasets = collect($fields)->transform(function ($item, $index) use ($dates, $array) {
-            return [
-                'name' => $item,
-                'type' => 'line',
-                'data' => $array[$index]->values(),
-            ];
-        });
 
         return view('admin.console.index', compact('fields', 'numbers', 'dates', 'datasets'));
     }

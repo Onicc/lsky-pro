@@ -18,15 +18,15 @@ use App\Enums\Watermark\Mode;
 return [
     'app' => [
         ConfigKey::AppName => 'Lsky Pro',
-        ConfigKey::AppVersion => 'V 2.1',
+        ConfigKey::AppVersion => config('lsky.version'),
         ConfigKey::SiteKeywords => 'Lsky Pro,lsky,兰空图床',
         ConfigKey::SiteDescription => 'Lsky Pro, Your photo album on the cloud.',
         ConfigKey::SiteNotice => '',
         ConfigKey::IcpNo => '',
-        ConfigKey::IsEnableRegistration => 1,
+        ConfigKey::IsEnableRegistration => 0,
         ConfigKey::IsEnableGallery => 1,
         ConfigKey::IsEnableApi => 1,
-        ConfigKey::IsAllowGuestUpload => 1,
+        ConfigKey::IsAllowGuestUpload => 0,
         ConfigKey::UserInitialCapacity => 512000,
         ConfigKey::IsUserNeedVerify => 0,
         ConfigKey::Mail => [
@@ -106,7 +106,7 @@ return [
         GroupConfigKey::LimitPerDay => 300,
         GroupConfigKey::LimitPerWeek => 600,
         GroupConfigKey::LimitPerMonth => 999,
-        GroupConfigKey::AcceptedFileSuffixes => ['jpeg', 'jpg', 'png', 'gif', 'tif', 'bmp', 'ico', 'psd', 'webp', 'svg'],
+        GroupConfigKey::AcceptedFileSuffixes => ['jpeg', 'jpg', 'png', 'gif', 'tif', 'bmp', 'ico', 'psd', 'webp'],
         GroupConfigKey::ImageSaveFormat => '',
         GroupConfigKey::ImageSaveQuality => 75,
         GroupConfigKey::PathNamingRule => '{Y}/{m}/{d}',
@@ -116,7 +116,7 @@ return [
     'user' => [
         UserConfigKey::DefaultAlbum => 0,
         UserConfigKey::DefaultStrategy => 0,
-        UserConfigKey::DefaultPermission => ImagePermission::Private,
+        UserConfigKey::DefaultPermission => ImagePermission::LinkOnly,
         UserConfigKey::PastedAction => PastedAction::Waiting,
         UserConfigKey::IsAutoClearPreview => false,
     ]

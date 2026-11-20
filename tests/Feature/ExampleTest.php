@@ -2,20 +2,17 @@
 
 namespace Tests\Feature;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Http\Middleware\CheckIsInstalled;
 use Tests\TestCase;
 
 class ExampleTest extends TestCase
 {
-    /**
-     * A basic test example.
-     *
-     * @return void
-     */
-    public function test_the_application_returns_a_successful_response()
+    public function test_an_uninstalled_site_exposes_read_only_setup_instructions(): void
     {
-        $response = $this->get('/');
-
-        $response->assertStatus(302);
+        $this->withMiddleware(CheckIsInstalled::class);
+        $this->get('/')->assertRedirect('/install');
+        $this->get('/install')->assertOk()->assertSee('php artisan lsky:install');
+        $this->post('/install')->assertMethodNotAllowed();
+        $this->getJson('/up')->assertStatus(503)->assertJson(['status' => 'unavailable']);
     }
 }

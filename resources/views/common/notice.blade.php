@@ -2,7 +2,11 @@
 
     <x-modal id="notice-modal">
         <div class="markdown-body">
-            {!! (new Parsedown())->parse(\App\Utils::config(\App\Enums\ConfigKey::SiteNotice)) !!}
+            {!! \Illuminate\Support\Str::markdown((string) \App\Utils::config(\App\Enums\ConfigKey::SiteNotice), [
+                'html_input' => 'strip',
+                'allow_unsafe_links' => false,
+                'max_nesting_level' => 20,
+            ]) !!}
         </div>
         <div class="mt-4 w-full text-right">
             <x-button type="button" @click="$store.modal.close('notice-modal');">OK</x-button>

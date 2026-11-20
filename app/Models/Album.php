@@ -59,7 +59,7 @@ class Album extends Model
                     $builder->latest();
             }
         })->when($request->query('keyword'), function (Builder $builder, $keyword) {
-            $builder->where('name', 'like', "%{$keyword}%")->orWhere('intro', 'like', "%{$keyword}%");
+            $builder->where(fn (Builder $query) => $query->where('name', 'like', "%{$keyword}%")->orWhere('intro', 'like', "%{$keyword}%"));
         });
     }
 

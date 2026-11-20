@@ -2,13 +2,13 @@
 
 namespace App\Models;
 
+use App\Casts\StrategyConfig;
 use App\Enums\StrategyKey;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Carbon;
 use Sabre\DAV\Client;
 
@@ -41,8 +41,10 @@ class Strategy extends Model
     protected $casts = [
         'id' => 'integer',
         'key' => 'integer',
-        'configs' => 'collection',
+        'configs' => StrategyConfig::class,
     ];
+
+    protected $hidden = ['configs'];
 
     const DRIVERS = [
         StrategyKey::Local => '本地',
@@ -64,41 +66,36 @@ class Strategy extends Model
         Client::AUTH_NTLM => 'Ntlm',
     ];
 
-    protected static function booted()
+    public function supportsPrivateMedia(): bool
     {
-        static::saving(function (self $strategy) {
-            $strategy->configs['root'] = $strategy->configs->get('root');
-            $strategy->configs['url'] = rtrim($strategy->configs->get('url'), '/');
-            if ($strategy->key == StrategyKey::Local) {
-                $symlink = self::getRootPath($strategy->configs['url']);
-                $target = $strategy->configs['root'] ?: config('filesystems.disks.uploads.root');
-                if (! is_dir(public_path($symlink))) {
-                    (new Filesystem())->link($target, $symlink);
-                }
-                // 是否需要移除旧的符号链接
-                $url = $strategy->getOriginal('configs')['url'] ?? '';
-                if ($url) {
-                    $oldSymlink = self::getRootPath($url);
-                    if ($oldSymlink != $symlink) {
-                        @unlink($oldSymlink);
-                    }
-                }
-            }
-        });
+        $root = $this->configs->get('root');
+        $defaultLocal = $this->key === StrategyKey::Local
+            && (! $root || $root === config('filesystems.disks.uploads.root'));
 
-        static::deleted(function (self $strategy) {
-            // 如果是本地策略，删除的时候同时删除符号连接
-            if ($strategy->key === StrategyKey::Local) {
-                $symlink = self::getRootPath($strategy->configs['url']);
-                @unlink(public_path($symlink));
-            }
-        });
+        return $defaultLocal || (bool) $this->configs->get('private_objects', false);
     }
 
-    public static function getRootPath($url): string
+    public function isLegacyDeliveryManaged(): bool
     {
-        $path = (parse_url($url)['path'] ?? '');
-        return current(array_filter(explode('/', $path)));
+        return $this->key === StrategyKey::Local
+            && parse_url((string) $this->configs->get('url'), PHP_URL_HOST)
+                === parse_url((string) config('app.url'), PHP_URL_HOST);
+    }
+
+    public function storageLocation(): array
+    {
+        return $this->configs->only([
+            'root', 'endpoint', 'region', 'bucket', 'bucket_endpoint', 'use_path_style_endpoint',
+            'service', 'app_id', 'host', 'port', 'username', 'base_uri', 'prefix',
+        ])->reject(fn ($value) => $value === null || $value === '')
+            ->map(fn ($value) => (string) $value)->sortKeys()->all();
+    }
+
+    public static function getRootPath(?string $url): string
+    {
+        $path = trim((string) parse_url($url ?? '', PHP_URL_PATH), '/');
+
+        return explode('/', $path, 2)[0];
     }
 
     public function intro(): Attribute

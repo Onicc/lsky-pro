@@ -9,37 +9,14 @@ use App\Models\User;
 use App\Services\ImageService;
 use App\Services\UserService;
 use App\Utils;
-use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 
 class ImageController extends Controller
 {
-    /**
-     * @throws AuthenticationException
-     */
     public function upload(Request $request, ImageService $service): Response
     {
-        if ($request->hasHeader('Authorization')) {
-            $guards = array_keys(config('auth.guards'));
-
-            if (empty($guards)) {
-                $guards = [null];
-            }
-
-            foreach ($guards as $guard) {
-                if (Auth::guard($guard)->check()) {
-                    Auth::shouldUse($guard);
-                    break;
-                }
-            }
-
-            if (! Auth::check()) {
-                throw new AuthenticationException('Authentication failed.');
-            }
-        }
-
         try {
             $image = $service->store($request);
         } catch (UploadException $e) {
@@ -61,7 +38,9 @@ class ImageController extends Controller
         /** @var User $user */
         $user = Auth::user();
 
-        $images = $user->images()->filter($request)->paginate(40)->withQueryString();
+        $filters = $request->validate(['per_page' => 'sometimes|integer|min:1|max:100']);
+        $images = $user->images()->with(['strategy', 'group', 'album'])
+            ->filter($request)->paginate($filters['per_page'] ?? 40)->withQueryString();
         $images->getCollection()->each(function (Image $image) {
             $image->human_date = $image->created_at->diffForHumans();
             $image->date = $image->created_at->format('Y-m-d H:i:s');
@@ -77,7 +56,10 @@ class ImageController extends Controller
     {
         /** @var User $user */
         $user = Auth::user();
-        (new UserService())->deleteImages([$request->route('key')], $user, 'key');
-        return $this->success('删除成功');
+        if (! app(UserService::class)->deleteImages([$request->route('key')], $user, 'key')) {
+            return $this->fail('未找到该图片');
+        }
+
+        return $this->success('删除成功，储存对象待清理');
     }
 }

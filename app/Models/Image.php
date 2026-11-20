@@ -5,7 +5,6 @@ namespace App\Models;
 use App\Enums\GroupConfigKey;
 use App\Enums\ImagePermission;
 use App\Services\ImageService;
-use App\Utils;
 use Illuminate\Support\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -13,8 +12,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Str;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use League\Flysystem\Filesystem;
 
 /**
@@ -65,6 +63,7 @@ class Image extends Model
         'extension',
         'md5',
         'sha1',
+        'sha256',
         'width',
         'height',
         'permission',
@@ -77,6 +76,10 @@ class Image extends Model
         'album_id',
         'group_id',
         'strategy_id',
+        'idempotency_key',
+        'request_fingerprint',
+        'thumbnail_pending_at',
+        'thumbnail_attempts',
     ];
 
     protected $casts = [
@@ -90,6 +93,9 @@ class Image extends Model
         'size' => 'float',
         'is_unhealthy' => 'bool',
         'permission' => 'integer',
+        'object_managed' => 'boolean',
+        'thumbnail_pending_at' => 'datetime',
+        'thumbnail_attempts' => 'integer',
     ];
 
     protected ?Filesystem $filesystem = null;
@@ -97,30 +103,7 @@ class Image extends Model
     protected static function booted()
     {
         static::creating(function (self $image) {
-            $image->key = $image->generateKey();
-        });
-
-        static::deleting(function (self $image) {
-            // TODO 检测是否启用了队列，放置队列中异步删除
-            // 在当前图片所属的策略中是否存在其他相同 md5 和 sha1 的记录，没有则可以删除物理文件
-            if (!static::query()
-                ->where('strategy_id', $image->strategy_id)
-                ->where('id', '<>', $image->id)
-                ->where('md5', $image->md5)
-                ->where('sha1', $image->sha1)
-                ->exists()
-            ) {
-                // 删除本地缓存文件
-                try {
-                    // 删除物理文件
-                    $image->filesystem()->delete($image->pathname);
-                    @unlink(public_path($image->getThumbnailPathname()));
-                    // 删除缓存
-                    Cache::forget("image_{$image->key}");
-                } catch (\Throwable $e) {
-                    Utils::e($e, '删除物理文件时发生异常');
-                }
-            }
+            $image->key ??= bin2hex(random_bytes(16));
         });
     }
 
@@ -145,17 +128,23 @@ class Image extends Model
                 case 'public':
                     $builder->where('permission', ImagePermission::Public);
                     break;
+                case 'link':
+                    $builder->where('permission', ImagePermission::LinkOnly);
+                    break;
                 case 'private':
                     $builder->where('permission', ImagePermission::Private);
                     break;
             }
-        })->when($request->query('keyword'), function (Builder $builder, $keyword) {
-            $builder->where('origin_name', 'like', "%{$keyword}%")->orWhere('alias_name', 'like', "%{$keyword}%");
+        })->when(is_string($request->query('keyword')) ? $request->query('keyword') : null, function (Builder $builder, $keyword) {
+            $builder->where(function (Builder $query) use ($keyword) {
+                $query->where('origin_name', 'like', "%{$keyword}%")
+                    ->orWhere('alias_name', 'like', "%{$keyword}%");
+            });
         })->when((int) $request->query('album_id'), function (Builder $builder, $albumId) {
             $builder->where('album_id', $albumId);
         }, function (Builder $builder) {
             $builder->whereNull('album_id');
-        });
+        })->orderByDesc('id');
     }
 
     public function filename(): Attribute
@@ -172,50 +161,65 @@ class Image extends Model
     public function url(): Attribute
     {
         return new Attribute(function () {
-            // 是否启用原图保护功能
-            if ($this->group?->configs->get(GroupConfigKey::IsEnableOriginalProtection)) {
-                $url = asset("{$this->key}.{$this->extension}");
-            } else {
-                $url = rtrim($this->strategy?->configs->get('url'), '/').'/'.ltrim($this->pathname, '/');
+            $groupOptions = $this->group?->configs;
+            if ($this->object_managed || $this->permission === ImagePermission::Private || $this->is_unhealthy
+                || $this->extension === 'svg' || $groupOptions?->get(GroupConfigKey::IsEnableOriginalProtection)
+                || ! $this->strategy) {
+                return route('media.original', ['key' => $this->key, 'extension' => $this->extension]);
             }
 
-            // 拼接图片 url
-            return $url.($this->strategy?->configs->get('queries') ?: '');
+            $encoded = implode('/', array_map('rawurlencode', explode('/', ltrim($this->pathname, '/'))));
+
+            return rtrim((string) $this->strategy->configs->get('url'), '/').'/'.$encoded
+                .($this->strategy->configs->get('queries') ?: '');
         });
     }
 
     public function thumbUrl(): Attribute
     {
-        return new Attribute(function () {
-            $pathname = $this->getThumbnailPathname();
-
-            // 没有缩略图则返回原图
-            if (! file_exists(public_path($pathname))) {
-                return $this->url;
-            }
-
-            return asset($pathname);
-        });
+        return new Attribute(fn () => route('media.thumbnail', ['key' => $this->key]));
     }
 
     public function links(): Attribute
     {
-        return new Attribute(fn() => collect([
-            'url' => $this->url,
-            'html' => "&lt;img src=\"{$this->url}\" alt=\"{$this->origin_name}\" title=\"{$this->origin_name}\" /&gt;",
-            'bbcode' => "[img]{$this->url}[/img]",
-            'markdown' => "![{$this->origin_name}]({$this->url})",
-            'markdown_with_link' => "[![{$this->origin_name}]({$this->url})]({$this->url})",
-            'thumbnail_url' => $this->thumb_url,
-        ]));
+        return new Attribute(function () {
+            $url = $this->url;
+            $name = $this->origin_name;
+            $html = '<img src="'.e($url).'" alt="'.e($name).'" title="'.e($name).'" />';
+            $markdownName = str_replace(['\\', '[', ']', "\r", "\n"], ['\\\\', '\\[', '\\]', ' ', ' '], $name);
+            $markdownUrl = str_replace(['(', ')', ' '], ['%28', '%29', '%20'], $url);
+
+            return collect([
+                'url' => $url,
+                'html' => e($html),
+                'bbcode' => "[img]{$url}[/img]",
+                'markdown' => "![{$markdownName}]({$markdownUrl})",
+                'markdown_with_link' => "[![{$markdownName}]({$markdownUrl})]({$markdownUrl})",
+                'thumbnail_url' => $this->thumb_url,
+            ]);
+        });
     }
 
     public function filesystem(): Filesystem
     {
-        if (is_null($this->filesystem)) {
-            $this->filesystem = new Filesystem((new ImageService())->getAdapter($this->strategy));
+        if (! $this->strategy) {
+            throw new NotFoundHttpException();
         }
-        return $this->filesystem;
+
+        return $this->filesystem ??= new Filesystem(
+            app(ImageService::class)->getAdapter($this->strategy, $this->object_managed ?? false),
+        );
+    }
+
+    public function storagePath(): string
+    {
+        return $this->object_managed ? '_lsky-media/v1/'.$this->pathname : $this->pathname;
+    }
+
+    public function supportsPrivateMedia(): bool
+    {
+        return $this->strategy?->supportsPrivateMedia() && ($this->object_managed
+            || $this->strategy->isLegacyDeliveryManaged());
     }
 
     public function user(): BelongsTo
@@ -238,17 +242,8 @@ class Image extends Model
         return $this->belongsTo(Strategy::class, 'strategy_id', 'id');
     }
 
-    public function getThumbnailPathname(): string
+    public function thumbnailPath(): string
     {
-        return trim(config('app.thumbnail_path'), '/')."/{$this->md5}.". ($this->extension === 'svg' ? 'svg' : "png");
-    }
-
-    private function generateKey($length = 6): string
-    {
-        $key = Str::random($length);
-        if (self::query()->where('key', $key)->exists()) {
-            return $this->generateKey(++$length);
-        }
-        return $key;
+        return config('image.private_root').'/thumbnails/'.$this->key.'.webp';
     }
 }

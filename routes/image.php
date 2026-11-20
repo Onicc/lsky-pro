@@ -1,14 +1,17 @@
 <?php
 
-use App\Http\Controllers\Controller;
+use App\Http\Controllers\MediaController;
 use Illuminate\Support\Facades\Route;
-use App\Enums\GroupConfigKey;
-use App\Enums\ConfigKey;
 
-$extensions = config('convention.group.accepted_file_suffixes');
-Route::middleware('cache.headers:public;max_age=2628000;etag')->group(function () use ($extensions) {
-    $extensions = array_merge(array_map('strtoupper', $extensions), array_map('strtolower', $extensions));
-    Route::any('{key}.{extension}', [
-        Controller::class, 'output',
-    ])->where('extension', implode('|', $extensions));
-});
+$imageTypes = 'jpg|jpeg|png|gif|tif|tiff|bmp|ico|psd|webp|svg';
+
+Route::get('media/review/{token}', [MediaController::class, 'review'])
+    ->where('token', '[a-f0-9]{32}')->name('media.review');
+Route::get('media/{key}/thumbnail.webp', [MediaController::class, 'thumbnail'])
+    ->whereAlphaNumeric('key')->name('media.thumbnail');
+Route::get('{key}.{extension}', [MediaController::class, 'original'])
+    ->where('key', '[a-zA-Z0-9]+')
+    ->where('extension', '(?i:'.$imageTypes.')')->name('media.original');
+Route::get('{prefix}/{file}', [MediaController::class, 'legacy'])
+    ->where('prefix', '(?!media/|thumbnails/)[^/]+')
+    ->where('file', '(?i:.+\.(?:'.$imageTypes.'))')->name('media.legacy');

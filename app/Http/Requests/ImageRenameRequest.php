@@ -22,7 +22,7 @@ class ImageRenameRequest extends FormRequest
     public function rules()
     {
         return [
-            'id' => 'required|numeric',
+            'id' => 'required|integer|min:1',
             'name' => 'required|max:50|string',
         ];
     }

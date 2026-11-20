@@ -4,6 +4,8 @@ namespace App;
 
 use App\Enums\ConfigKey;
 use App\Models\Config;
+use App\Support\SecretValue;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -21,21 +23,15 @@ class Utils
         ]);
     }
 
-    /**
-     * 获取头像地址
-     *
-     * @param $email
-     * @param int $s
-     * @param string $d
-     * @param string $r
-     * @return string
-     */
-    public static function getAvatar($email, int $s = 96, string $d = 'mp', string $r = 'g'): string
+    public static function getAvatar(string $name): string
     {
-        $url = 'https://cravatar.cn/avatar/';
-        $url .= md5(strtolower(trim($email)));
-        $url .= "?s=$s&d=$d&r=$r";
-        return $url;
+        $initial = e(mb_strtoupper(mb_substr(trim($name), 0, 1)) ?: '?');
+        $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">'
+            .'<rect width="48" height="48" rx="24" fill="#394591"/>'
+            .'<text x="24" y="31" fill="#fff" text-anchor="middle" font-size="22" font-family="sans-serif">'
+            .$initial.'</text></svg>';
+
+        return 'data:image/svg+xml;base64,'.base64_encode($svg);
     }
 
     /**
@@ -71,7 +67,15 @@ class Utils
                 return $value;
             });
         });
-        return '' === $name ? $configs : $configs->get($name, $default);
+        if ($name === ConfigKey::Mail && $configs->has($name)) {
+            $mail = $configs->get($name)->toArray();
+            $path = 'mailers.smtp.password';
+            Arr::set($mail, $path, SecretValue::decrypt(Arr::get($mail, $path)));
+
+            return collect($mail);
+        }
+
+        return $name === '' ? $configs : $configs->get($name, $default);
     }
 
     /**

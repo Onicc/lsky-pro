@@ -120,18 +120,19 @@
 
             $('[data-operate="detail"]').click(function () {
                 let user = $(this).closest('tr').data('json');
-                let html = $('#user-tpl').html()
-                    .replace(/__avatar__/g, user.avatar)
-                    .replace(/__name__/g, user.name)
-                    .replace(/__email__/g, user.email)
-                    .replace(/__capacity__/g, utils.formatSize(user.capacity * 1024))
-                    .replace(/__surplus_capacity__/g, utils.formatSize((user.capacity - user.images_sum_size) * 1024))
-                    .replace(/__image_num__/g, user.image_num)
-                    .replace(/__album_num__/g, user.album_num)
-                    .replace(/__registered_ip__/g, user.registered_ip || '-')
-                    .replace(/__status__/g, user.status === 1 ? '<span class="text-green-500">正常</span>' : '<span class="text-red-500">冻结</span>')
-                    .replace(/__email_verified_at__/g, user.email_verified_at || '-')
-                    .replace(/__created_at__/g, user.created_at);
+                let html = utils.template($('#user-tpl').html(), {
+                    avatar: user.avatar,
+                    name: user.name,
+                    email: user.email,
+                    capacity: utils.formatSize(user.capacity * 1024),
+                    surplus_capacity: utils.formatSize((user.capacity - user.images_sum_size) * 1024),
+                    image_num: user.image_num,
+                    album_num: user.album_num,
+                    registered_ip: user.registered_ip || '-',
+                    status: user.status === 1 ? '正常' : '冻结',
+                    email_verified_at: user.email_verified_at || '-',
+                    created_at: user.created_at,
+                });
 
                 $('#modal-content').html(html);
 
@@ -139,7 +140,7 @@
             });
             $('[data-operate="delete"]').click(function () {
                 Swal.fire({
-                    title: `确认删除用户【${$(this).closest('tr').data('json').name}】吗?`,
+                    titleText: `确认删除用户【${$(this).closest('tr').data('json').name}】吗?`,
                     text: "⚠️注意，删除后不可恢复，且该用户的图片将会变成游客身份！",
                     icon: 'warning',
                     showCancelButton: true,

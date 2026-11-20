@@ -354,27 +354,28 @@
             $('.item').click(function () {
                 let image = $(this).data('json');
                 let previewUrl = ['psd', 'tif'].indexOf(image.extension) === -1 ? image.url : image.thumb_url;
-                let html = $('#image-tpl').html()
-                    .replace(/__id__/g, image.id)
-                    .replace(/__url__/g, previewUrl)
-                    .replace(/__user_name__/g, image.user ? image.user.name+'('+image.user.email+')' : '游客')
-                    .replace(/__user_email__/g, image.user ? image.user.email : '-')
-                    .replace(/__album_name__/g, image.album ? image.album.name : '-')
-                    .replace(/__group_name__/g, image.group ? image.group.name : '-')
-                    .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
-                    .replace(/__name__/g, image.name)
-                    .replace(/__origin_name__/g, image.origin_name)
-                    .replace(/__pathname__/g, image.pathname)
-                    .replace(/__size__/g, utils.formatSize(image.size * 1024))
-                    .replace(/__mimetype__/g, image.mimetype)
-                    .replace(/__md5__/g, image.md5)
-                    .replace(/__sha1__/g, image.sha1)
-                    .replace(/__width__/g, image.width)
-                    .replace(/__height__/g, image.height)
-                    .replace(/__permission__/g, image.permission === {{ \App\Enums\ImagePermission::Public }} ? '<i class="fas fa-eye text-red-500"></i> 公开' : '<i class="fas fa-eye-slash text-green-500"></i> 私有')
-                    .replace(/__is_unhealthy__/g, image.is_unhealthy ? '<span class="text-red-500"><i class="fas fa-exclamation-triangle"></i> 是</span>' : '否')
-                    .replace(/__uploaded_ip__/g, image.uploaded_ip)
-                    .replace(/__created_at__/g, image.created_at);
+                let html = utils.template($('#image-tpl').html(), {
+                    id: image.id,
+                    url: previewUrl,
+                    user_name: image.user ? image.user.name+'('+image.user.email+')' : '游客',
+                    user_email: image.user ? image.user.email : '-',
+                    album_name: image.album ? image.album.name : '-',
+                    group_name: image.group ? image.group.name : '-',
+                    strategy_name: image.strategy ? image.strategy.name : '-',
+                    name: image.name,
+                    origin_name: image.origin_name,
+                    pathname: image.pathname,
+                    size: utils.formatSize(image.size * 1024),
+                    mimetype: image.mimetype,
+                    md5: image.md5,
+                    sha1: image.sha1,
+                    width: image.width,
+                    height: image.height,
+                    permission: ({0: '私有', 1: '公开', 2: '持链接可访问'})[image.permission],
+                    is_unhealthy: image.is_unhealthy ? '是' : '否',
+                    uploaded_ip: image.uploaded_ip,
+                    created_at: image.created_at,
+                });
 
                 $('#modal-content').html(html);
 
@@ -384,18 +385,19 @@
             $('.item-user').click(function (e) {
                 e.stopPropagation();
                 let user = $(this).closest('.item').data('json').user || {};
-                let html = $('#user-tpl').html()
-                    .replace(/__avatar__/g, user.avatar)
-                    .replace(/__name__/g, user.name)
-                    .replace(/__email__/g, user.email)
-                    .replace(/__capacity__/g, utils.formatSize(user.capacity * 1024))
-                    .replace(/__used_capacity__/g, utils.formatSize(user.images_sum_size * 1024))
-                    .replace(/__image_num__/g, user.image_num)
-                    .replace(/__album_num__/g, user.album_num)
-                    .replace(/__registered_ip__/g, user.registered_ip || '-')
-                    .replace(/__status__/g, user.status === 1 ? '<span class="text-green-500">正常</span>' : '<span class="text-red-500">冻结</span>')
-                    .replace(/__email_verified_at__/g, user.email_verified_at || '-')
-                    .replace(/__created_at__/g, user.created_at);
+                let html = utils.template($('#user-tpl').html(), {
+                    avatar: user.avatar,
+                    name: user.name,
+                    email: user.email,
+                    capacity: utils.formatSize(user.capacity * 1024),
+                    used_capacity: utils.formatSize(user.images_sum_size * 1024),
+                    image_num: user.image_num,
+                    album_num: user.album_num,
+                    registered_ip: user.registered_ip || '-',
+                    status: user.status === 1 ? '正常' : '冻结',
+                    email_verified_at: user.email_verified_at || '-',
+                    created_at: user.created_at,
+                });
 
                 $('#modal-content').html(html);
 

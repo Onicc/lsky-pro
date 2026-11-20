@@ -1,7 +1,3 @@
-@push('styles')
-    <link rel="stylesheet" href="{{ asset('css/markdown-css/github-markdown-light.css') }}">
-@endpush
-
 <x-guest-layout>
     <div class="py-14">
         <header class="w-full h-14 bg-gray-700 text-white flex justify-center fixed top-0 z-[9]">

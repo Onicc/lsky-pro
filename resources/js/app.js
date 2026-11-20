@@ -1,8 +1,18 @@
-require('./bootstrap');
+import './bootstrap';
+import '../css/app.css';
+import '../css/common.less';
+import '../css/gallery.less';
+import '../css/context-js.less';
+import '@fortawesome/fontawesome-free/css/fontawesome.min.css';
+import '@fortawesome/fontawesome-free/css/solid.min.css';
+import '@fortawesome/fontawesome-free/css/brands.min.css';
+import 'toastr/build/toastr.min.css';
+import 'sweetalert2/dist/sweetalert2.min.css';
 
 import Alpine from 'alpinejs';
 import Sidebar from './stores/sidebar';
 import Modal from './stores/modal';
+import { mountUploader } from './uploader';
 
 Alpine.store('sidebar', Sidebar);
 Alpine.store('modal', Modal);
@@ -60,96 +70,85 @@ window.utils = {
         }
         return false;
     },
+    template(source, values) {
+        const entities = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'};
+        return source.replace(/__([a-z0-9_]+)__/g, (token, key) => {
+            if (!Object.hasOwn(values, key)) return token;
+            return String(values[key] ?? '').replace(/[&<>"']/g, letter => entities[letter]);
+        });
+    },
     infiniteScroll(selector, options) {
-        if ($(selector).length > 0) {
-            let classes = options.classes || {};
-            let loadingText = options.loadingText || '加载中...';
-            let finishedText = options.finishedText || '我也是有底线的~';
-            let errorText = options.errorText || '加载失败';
-            let offset = options.offset || 30;
-            let props = {
-                loading: false,
-                finished: false,
-            };
-            $(selector).append(`<div class="infinite-scroll"><span>${loadingText}</span></div>`);
-            for (const classesKey in classes) {
-                $(selector).find('.infinite-scroll').addClass(classes[classesKey]);
-            }
-            let $btn = $(selector + ' .infinite-scroll span');
+        const viewport = document.querySelector(selector);
+        if (!viewport) return;
 
-            let opts = {
-                url: options.url || '',
-                data: {
-                    page: 1,
-                },
-                beforeSend() {
-                    props.loading = true;
-                    props.finished = false;
-                    $btn.text(loadingText).addClass('disabled')
-                },
-                success(response) {
-                    options.success && options.success.call(props, response.data);
-                },
-                complete(data) {
-                    props.loading = false;
-                    if (props.finished) {
-                        // no more
-                        $btn.text(finishedText).addClass('disabled')
-                    } else {
-                        $btn.text('加载更多').removeClass('disabled')
-                    }
-                    if (opts.data.page !== undefined) {
-                        opts.data.page++;
-                    }
-                    options.complete && options.complete.call(props, data)
-                },
-                error(error) {
-                    console.log(error)
-                    // response = error.response
-                    $btn.text(errorText).addClass('disabled')
-                    setTimeout(() => $btn.text(errorText).removeClass('disabled'), 3000)
-                }
-            };
+        const footer = document.createElement('div');
+        footer.className = `infinite-scroll ${(options.classes || []).join(' ')}`;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'rounded-md px-4 py-2 text-sm text-gray-700 disabled:cursor-default';
+        footer.append(button);
+        viewport.append(footer);
 
-            let load = (params, force) => {
-                if (!force) {
-                    if (props.loading || props.finished) return;
-                }
-                if (typeof options.data === 'function') {
-                    opts.data = options.data(opts.data) || {};
-                }
-                if (params) {
-                    opts.data = $.extend(opts.data, params)
-                }
+        let params = {page: 1};
+        let pending;
+        const state = {loading: false, finished: false};
 
-                opts.beforeSend();
-                axios.get(opts.url, {params: opts.data}).then(opts.success).catch(opts.error).finally(opts.complete);
-            };
-
-            // 首次加载
-            load();
-            $(selector).off('click').on('click', 'span:not(.disabled)', () => load());
-
-            $(selector).scroll(function () {
-                if (this.scrollTop + $(selector).height() >= this.scrollHeight - offset) {
-                    load();
-                }
-            });
-
-            return {
-                refresh(params) {
-                    load(params, true);
-                },
-                reset() {
-                    opts.data = {page: 1};
-                    props.loading = false;
-                    props.finished = false;
-                    load();
-                },
-                destroy() {
-                    $(selector).unbind('scroll').unbind('click')
-                }
+        async function load() {
+            if (state.loading || state.finished) return;
+            if (typeof options.data === 'function') params = options.data(params) || {};
+            const request = new AbortController();
+            pending = request;
+            state.loading = true;
+            button.disabled = true;
+            button.textContent = options.loadingText || '正在加载…';
+            try {
+                const {data} = await axios.get(options.url, {params: {...params}, signal: request.signal});
+                if (pending !== request) return;
+                if (!data.status) throw new Error(data.message || '加载失败');
+                options.success?.call(state, data);
+                button.textContent = state.finished
+                    ? (typeof options.finishedText === 'function' ? options.finishedText(params) : options.finishedText || '已显示全部')
+                    : '加载更多';
+                if (params.page !== undefined) params.page += 1;
+            } catch (error) {
+                if (pending !== request) return;
+                button.textContent = options.errorText || '加载失败，点击重试';
+                options.error?.call(state, error);
+            } finally {
+                if (pending !== request) return;
+                state.loading = false;
+                button.disabled = state.finished;
+                options.complete?.call(state);
             }
         }
+
+        const onScroll = () => {
+            if (viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - (options.offset || 30)) load();
+        };
+        button.addEventListener('click', load);
+        viewport.addEventListener('scroll', onScroll, {passive: true});
+        load();
+
+        return {
+            refresh(next) {
+                pending?.abort();
+                params = {...params, ...next};
+                state.loading = false;
+                state.finished = false;
+                load();
+            },
+            reset() {
+                params = {page: 1};
+                this.refresh({});
+            },
+            destroy() {
+                pending?.abort();
+                pending = null;
+                viewport.removeEventListener('scroll', onScroll);
+                footer.remove();
+            },
+        };
     }
 }
+
+for (const root of document.querySelectorAll('[data-uploader]')) mountUploader(root);

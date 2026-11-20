@@ -15,7 +15,8 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // $schedule->command('inspire')->hourly();
+        $schedule->command('lsky:media:prune')->everyFiveMinutes()->withoutOverlapping(15);
+        $schedule->command('lsky:thumbnails --pending --limit=40')->everyMinute()->withoutOverlapping(15);
     }
 
     /**

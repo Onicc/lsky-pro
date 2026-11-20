@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\URL;
 use Illuminate\View\View;
 
 class ImageController extends Controller
@@ -61,61 +62,128 @@ class ImageController extends Controller
 
     public function permission(Request $request): Response
     {
-        /** @var User $user */
-        $user = Auth::user();
+        $user = $request->user();
+        $permissions = [
+            'public' => ImagePermission::Public,
+            'private' => ImagePermission::Private,
+            'link' => ImagePermission::LinkOnly,
+        ];
         $permission = $request->input('permission');
-        $permissions = ['public' => ImagePermission::Public, 'private' => ImagePermission::Private];
-        if (!in_array($permission, array_keys($permissions))) {
-            return $this->fail('设置失败');
+        $ids = $this->imageIds($request->input('ids'));
+
+        if (! is_string($permission) || ! isset($permissions[$permission]) || ! $ids) {
+            return $this->fail('未选择有效的图片或访问权限');
         }
-        $user->images()->whereIn('id', (array) $request->input('ids'))->update([
-            'permission' => $permissions[$permission],
+
+        return DB::transaction(function () use ($user, $ids, $permissions, $permission) {
+            $images = $user->images()->with('strategy')->whereKey($ids)->orderBy('id')->lockForUpdate()->get();
+
+            if ($images->count() !== count($ids)) {
+                return $this->fail('所选图片已不存在');
+            }
+            if ($permission === 'private' && $images->contains(fn (Image $image) => ! $image->supportsPrivateMedia())) {
+                return $this->fail('所选图片的旧链接或储存位置仍可匿名读取，请先迁移到私有储存');
+            }
+
+            $user->images()->whereKey($ids)->update([
+                'permission' => $permissions[$permission],
+                'share_version' => bin2hex(random_bytes(16)),
+            ]);
+
+            return $this->success('设置成功');
+        });
+    }
+
+    public function share(Request $request, int $id): Response
+    {
+        $image = $request->user()->images()->findOrFail($id);
+        if ($image->is_unhealthy || ! $image->strategy_id || $image->permission !== ImagePermission::Private) {
+            return $this->fail('仅私有图片支持临时分享，请复制其他图片的直接链接');
+        }
+
+        $expiresAt = now()->addMinutes(10);
+        $link = URL::temporarySignedRoute('media.original', $expiresAt, [
+            'key' => $image->key,
+            'extension' => $image->extension,
+            'version' => $image->share_version,
         ]);
-        return $this->success('设置成功');
+
+        return $this->success('分享链接在 10 分钟内有效', ['url' => $link, 'expires_at' => $expiresAt->toIso8601String()]);
     }
 
     public function rename(ImageRenameRequest $request): Response
     {
-        /** @var User $user */
-        $user = Auth::user();
-        /** @var Image $image */
-        if ($image = $user->images()->find($request->input('id'))) {
-            $image->alias_name = $request->input('name');
-            $image->save();
+        $image = $request->user()->images()->find($request->input('id'));
+
+        if (! $image) {
+            return $this->fail('未找到该图片');
         }
+
+        $image->alias_name = $request->input('name');
+        $image->save();
 
         return $this->success('重命名成功', $image->only('id', 'filename'));
     }
 
     public function movement(Request $request): Response
     {
-        /** @var User $user */
-        $user = Auth::user();
-        DB::transaction(function () use ($user, $request) {
-            /** @var null|Album $album */
-            $album = $user->albums()->find((int) $request->input('id'));
-            $user->images()->whereIn('id', $request->input('selected'))->update([
-                'album_id' => $album->id ?? null,
-            ]);
-            if ($album) {
-                $album->image_num = $album->images()->count();
-                $album->save();
+        $user = $request->user();
+        $ids = $this->imageIds($request->input('selected'));
+        $destination = $request->input('id');
+
+        if (! $ids || ($destination && (! is_scalar($destination) || ! ctype_digit((string) $destination)))) {
+            return $this->fail('所选图片或相册无效');
+        }
+
+        return DB::transaction(function () use ($user, $ids, $destination) {
+            $album = $destination ? $user->albums()->whereKey($destination)->lockForUpdate()->first() : null;
+            if ($destination && ! $album) {
+                return $this->fail('目标相册已不存在');
             }
-            if ($albumId = (int) $request->input('album_id')) {
-                /** @var Album $originAlbum */
-                $originAlbum = $user->albums()->find($albumId);
-                $originAlbum->image_num = $originAlbum->images()->count();
-                $originAlbum->save();
+
+            $images = $user->images()->whereKey($ids)->orderBy('id')->lockForUpdate()->get(['id', 'album_id']);
+            if ($images->count() !== count($ids)) {
+                return $this->fail('所选图片已不存在');
             }
-        });
-        return $this->success('移动成功');
+
+            $albumIds = $images->pluck('album_id')->push($album?->id)->filter()->unique()->sort()->all();
+            $user->images()->whereKey($ids)->update(['album_id' => $album?->id]);
+
+            $user->albums()->whereKey($albumIds)->withCount('images')->get()->each(function (Album $album) {
+                $album->update(['image_num' => $album->images_count]);
+            });
+
+            return $this->success('移动成功');
+        }, 3);
     }
 
-    public function delete(Request $request): Response
+    public function delete(Request $request, UserService $users): Response
     {
-        /** @var User $user */
-        $user = Auth::user();
-        (new UserService())->deleteImages($request->all() ?: [], $user);
-        return $this->success('删除成功');
+        $ids = $this->imageIds($request->input('ids', $request->all()));
+        if (! $ids) {
+            return $this->fail('请选择需要删除的图片');
+        }
+
+        $deleted = $users->deleteImages($ids, $request->user());
+        if (! $deleted) {
+            return $this->fail('未找到需要删除的图片');
+        }
+
+        return $this->success('删除成功，储存对象待清理', ['deleted' => $deleted]);
+    }
+
+    private function imageIds(mixed $input): array
+    {
+        if (! is_array($input) || count($input) > 500) {
+            return [];
+        }
+
+        foreach ($input as $id) {
+            if (! is_scalar($id) || ! ctype_digit((string) $id) || (int) $id < 1) {
+                return [];
+            }
+        }
+
+        return array_values(array_unique(array_map('intval', $input)));
     }
 }

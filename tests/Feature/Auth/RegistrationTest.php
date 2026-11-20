@@ -2,13 +2,20 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Enums\ConfigKey;
+use App\Models\Config;
 use App\Providers\RouteServiceProvider;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 class RegistrationTest extends TestCase
 {
-    use RefreshDatabase;
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Config::query()->where('name', ConfigKey::IsEnableRegistration)->update(['value' => 1]);
+        Cache::forget('configs');
+    }
 
     public function test_registration_screen_can_be_rendered()
     {

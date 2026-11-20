@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Album;
 use App\Models\User;
+use App\Services\AlbumService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
@@ -15,18 +16,17 @@ class AlbumController extends Controller
     {
         /** @var User $user */
         $user = Auth::user();
-        $albums = $user->albums()->filter($request)->paginate(40);
+        $albums = $user->albums()->filter($request)->orderByDesc('id')->paginate(40)->withQueryString();
         $albums->getCollection()->each(function (Album $album) {
             $album->setVisible(['id', 'name', 'intro', 'image_num']);
         });
         return $this->success('success', $albums);
     }
 
-    public function destroy(Request $request): Response
+    public function destroy(Request $request, AlbumService $albums): Response
     {
-        /** @var User $user */
-        $user = Auth::user();
-        $user->albums()->where('id', $request->route('id'))->delete();
-        return $this->success('删除成功');
+        return $albums->delete($request->user(), (int) $request->route('id'))
+            ? $this->success('删除成功')
+            : $this->fail('不存在的相册');
     }
 }

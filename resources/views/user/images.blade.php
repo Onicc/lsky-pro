@@ -1,9 +1,8 @@
 @section('title', '我的图片')
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('css/justified-gallery/justifiedGallery.min.css') }}">
-    <link rel="stylesheet" href="{{ asset('css/viewer-js/viewer.min.css') }}">
-    <link rel="stylesheet" href="{{ asset('css/context-js/context-js.css') }}">
+    <link rel="stylesheet" href="{{ Vite::asset('justified-gallery.css') }}">
+    <link rel="stylesheet" href="{{ Vite::asset('viewer.css') }}">
 @endpush
 
 <x-app-layout>
@@ -15,13 +14,14 @@
                 <a data-operate="remove" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">移出当前相册</a>
                 <a data-operate="permission" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">设置权限</a>
                 <a data-operate="detail" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">详细信息</a>
+                <a data-operate="share" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">分享链接</a>
                 <a data-operate="rename" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">重命名</a>
                 <a data-operate="delete" class="hidden text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">删除</a>
             </div>
             <div class="block lg:hidden">
                 <x-dropdown direction="right">
                     <x-slot name="trigger">
-                        <a class="text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)"><i class="fas fa-ellipsis-h text-blue-500"></i></a>
+                        <a class="text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)" aria-label="图片操作"><i class="fas fa-ellipsis-h text-blue-500" aria-hidden="true"></i></a>
                     </x-slot>
 
                     <x-slot name="content">
@@ -30,6 +30,7 @@
                         <x-dropdown-link data-operate="remove" class="hidden" href="javascript:void(0)" @click="open = false">移出当前相册</x-dropdown-link>
                         <x-dropdown-link data-operate="permission" class="hidden" href="javascript:void(0)" @click="open = false">设置权限</x-dropdown-link>
                         <x-dropdown-link data-operate="detail" class="hidden" href="javascript:void(0)" @click="open = false">详细信息</x-dropdown-link>
+                        <x-dropdown-link data-operate="share" class="hidden" href="javascript:void(0)" @click="open = false">分享链接</x-dropdown-link>
                         <x-dropdown-link data-operate="rename" class="hidden" href="javascript:void(0)" @click="open = false">重命名</x-dropdown-link>
                         <x-dropdown-link data-operate="delete" class="hidden" href="javascript:void(0)" @click="open = false">删除</x-dropdown-link>
                     </x-slot>
@@ -37,7 +38,7 @@
             </div>
         </div>
         <div class="flex space-x-2 items-center">
-            <input type="text" id="search" class="px-2.5 py-1.5 border-0 outline-none rounded bg-gray-100 text-sm transition-all duration-300 hidden md:block md:w-36 md:hover:w-52 md:focus:w-52" placeholder="输入关键字搜索...">
+            <input type="text" id="search" class="px-2.5 py-1.5 border-0 outline-none rounded bg-gray-100 text-sm transition-all duration-300 w-28 md:w-36 md:hover:w-52 md:focus:w-52" aria-label="搜索图片" placeholder="搜索图片">
             <x-dropdown direction="left">
                 <x-slot name="trigger">
                     <a id="order" class="text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:void(0)">
@@ -70,6 +71,7 @@
                     </x-dropdown-link>
                     <x-dropdown-link href="javascript:void(0)" @click="open = false; setPermission('public')">公开
                     </x-dropdown-link>
+                    <x-dropdown-link href="javascript:void(0)" @click="open = false; setPermission('link')">持链接可访问</x-dropdown-link>
                     <x-dropdown-link href="javascript:void(0)" @click="open = false; setPermission('private')">私有
                     </x-dropdown-link>
                 </x-slot>
@@ -86,7 +88,7 @@
         <div id="drawer" class="absolute bg-white w-64 md:w-72 top-0 -right-[1000px] bottom-0 z-[2] flex flex-col transition-all duration-300">
             <div class="flex justify-between items-center text-md px-3 py-1 border-b">
                 <span class="text-gray-600 truncate" id="drawer-title"></span>
-                <a href="javascript:drawer.close()" class="p-2"><i class="fas fa-times text-blue-500"></i></a>
+                <a href="javascript:drawer.close()" class="p-2" aria-label="关闭侧栏"><i class="fas fa-times text-blue-500"></i></a>
             </div>
             <div id="drawer-content" class="overflow-y-auto"></div>
         </div>
@@ -94,7 +96,7 @@
 
     <script type="text/html" id="images-item-tpl">
         <a href="javascript:void(0)" data-id="__id__" data-json='__json__' class="images-item relative cursor-default rounded outline outline-2 outline-offset-2 outline-transparent">
-            <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer sm:hidden group-hover:block">
+            <div class="image-selector absolute z-[2] top-0 right-0 overflow-hidden cursor-pointer ">
                 <div class="p-1 text-xl sm:text-2xl">
                     <i class="fas fa-check-circle block rounded-full bg-white text-white border border-gray-500"></i>
                 </div>
@@ -105,7 +107,7 @@
                     <p class="text-xs date" title="__human_date__">__date__</p>
                 </div>
             </div>
-            <img alt="__name__" data-original="__url__" src="__thumb_url__" width="__width__" height="__height__">
+            <img alt="__name__" loading="lazy" data-original="__url__" src="__thumb_url__" width="__width__" height="__height__">
         </a>
     </script>
 
@@ -198,12 +200,12 @@
     </script>
 
     @push('scripts')
-        <script src="{{ asset('js/justified-gallery/jquery.justifiedGallery.min.js') }}"></script>
-        <script src="{{ asset('js/viewer-js/viewer.min.js') }}"></script>
-        <script src="{{ asset('js/dragselect/ds.min.js') }}"></script>
-        <script src="{{ asset('js/context-js/context-js.js') }}"></script>
-        <script src="{{ asset('js/clipboard/index.browser.js') }}"></script>
-        <script src="{{ asset('js/clipboard/clipboard.min.js') }}"></script>
+        <script src="{{ Vite::asset('justified-gallery.js') }}"></script>
+        <script src="{{ Vite::asset('viewer.js') }}"></script>
+        <script src="{{ Vite::asset('dragselect.js') }}"></script>
+        <script src="{{ Vite::asset('context-menu.js') }}"></script>
+        <script src="{{ Vite::asset('clipboard/image.js') }}"></script>
+        <script src="{{ Vite::asset('clipboard/clipboard.js') }}"></script>
         <script>
             let gridConfigs = {
                 rowHeight: 180,
@@ -230,7 +232,8 @@
                 open(title, content, callback) {
                     $drawerMask.fadeIn();
                     $drawer.css('right', 0);
-                    $drawer.find('#drawer-title').html(title);
+                    const $title = $drawer.find('#drawer-title').empty();
+                    typeof title === 'string' ? $title.text(title) : $title.append(title);
                     $drawer.find('#drawer-content').html(content);
                     callback && callback();
                 },
@@ -255,6 +258,7 @@
             const imagesInfinite = utils.infiniteScroll(IMAGES_SCROLL, {
                 url: '{{ route('user.images') }}',
                 classes: ['dragselect'],
+                finishedText: params => $photos.find(IMAGES_ITEM).length ? '已显示全部图片' : (params.keyword ? '未找到符合条件的图片' : '此处还没有图片'),
                 success: function (response) {
                     if (!response.status) {
                         return toastr.error(response.message);
@@ -267,16 +271,17 @@
 
                     let html = '';
                     for (const i in images) {
-                        html += $('#images-item-tpl').html()
-                            .replace(/__id__/g, images[i].id)
-                            .replace(/__name__/g, images[i].filename.replace(/\$/g, '$$$$'))
-                            .replace(/__human_date__/g, images[i].human_date)
-                            .replace(/__date__/g, images[i].date)
-                            .replace(/__url__/g, images[i].url)
-                            .replace(/__thumb_url__/g, images[i].thumb_url)
-                            .replace(/__width__/g, images[i].width)
-                            .replace(/__height__/g, images[i].height)
-                            .replace(/__json__/g, JSON.stringify(images[i]).replace(/\$/g, '$$$$'))
+                        html += utils.template($('#images-item-tpl').html(), {
+                            id: images[i].id,
+                            name: images[i].filename,
+                            human_date: images[i].human_date,
+                            date: images[i].date,
+                            url: images[i].url,
+                            thumb_url: images[i].thumb_url,
+                            width: images[i].width,
+                            height: images[i].height,
+                            json: JSON.stringify(images[i]),
+                        });
                     }
 
                     $photos.append(html);
@@ -308,7 +313,10 @@
             }
 
             const getAlbums = (options, callback) => {
-                let title = '__title__ <i class="cursor-pointer fas fa-plus text-blue-500" onclick="$(\'#album-add\').toggleClass(\'hidden\')"></i>'.replace(/__title__/g, (options || {}).title || '我的相册');
+                const title = $('<span>').text(options?.title || '我的相册');
+                const add = $('<button>', {type: 'button', class: 'ml-2 rounded px-2 py-1 text-blue-700', text: '新建'});
+                add.on('click', () => $('#album-add').toggleClass('hidden').find('input').trigger('focus'));
+                title.append(add);
                 let content = $('#albums-container-tpl').html();
                 drawer.toggle(title, content, function () {
                     let $albums = $('#albums-container');
@@ -328,12 +336,13 @@
 
                             let html = '';
                             for (const i in albums) {
-                                let item = $('#albums-item-tpl').html()
-                                    .replace(/__id__/g, albums[i].id)
-                                    .replace(/__name__/g, albums[i].name)
-                                    .replace(/__intro__/g, albums[i].intro)
-                                    .replace(/__image_num__/g, albums[i].image_num)
-                                    .replace(/__json__/g, JSON.stringify(albums[i]))
+                                let item = utils.template($('#albums-item-tpl').html(), {
+                                    id: albums[i].id,
+                                    name: albums[i].name,
+                                    intro: albums[i].intro,
+                                    image_num: albums[i].image_num,
+                                    json: JSON.stringify(albums[i]),
+                                });
                                 if (albums[i].id === selectedAlbum.id) {
                                     // 选中的相册高亮
                                     item = item
@@ -375,11 +384,11 @@
                         let $item = $(this).closest('a.albums-item');
                         $albums.find(UPDATE_ID).remove();
                         if (selectedId !== $item.data('id')) {
-                            $item.after($('#album-update-tpl').html()
-                                .replace(/__id__/g, $item.data('id'))
-                                .replace(/__name__/g, $item.find('>span').html())
-                                .replace(/__intro__/g, $item.attr('title'))
-                            );
+                            $item.after(utils.template($('#album-update-tpl').html(), {
+                                id: $item.data('id'),
+                                name: $item.find('>span').text(),
+                                intro: $item.attr('title'),
+                            }));
                         }
                     });
 
@@ -419,7 +428,7 @@
                                 $form.get(0).reset();
                                 resetAlbums()
                             } else {
-                                $errorMessage.html('<i class="fas fa-exclamation-circle"></i> ' + response.data.message).show();
+                                $errorMessage.text(response.data.message).show();
                             }
                         });
                     });
@@ -437,7 +446,7 @@
                                     .find('.name').text($form.find('input').val());
                                 $editContainer.remove();
                             } else {
-                                $errorMessage.html('<i class="fas fa-exclamation-circle"></i> ' + response.data.message).show();
+                                $errorMessage.text(response.data.message).show();
                             }
                         });
                     });
@@ -451,7 +460,7 @@
 
             const setPermission = function (permission) {
                 resetImages({page: 1, permission: permission})
-                $('#permission span').text({public: '公开', private: '私有', all: '全部'}[permission]);
+                $('#permission span').text({public: '公开', private: '私有', link: '持链接可访问', all: '全部'}[permission]);
             };
 
             $('#search').keydown(function (e) {
@@ -486,7 +495,7 @@
                     operates = ['refresh'];
                 }
                 if (selected.length === 1) {
-                    operates = ['refresh', 'movements', 'permission', 'detail', 'rename', 'delete'];
+                    operates = ['refresh', 'movements', 'permission', 'detail', 'share', 'rename', 'delete'];
                 }
                 if (selected.length > 1) {
                     operates = ['refresh', 'movements', 'permission', 'delete'];
@@ -509,10 +518,21 @@
             ds.subscribe('elementselect', _ => bindOperates());
             ds.subscribe('elementunselect', _ => bindOperates());
 
-            $photos.on('click', '.image-selector', function () {
+            $photos.on('click', '.image-selector', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
                 ds.toggleSelection($(this).closest('a'));
                 bindOperates();
-            })
+            }).on('keydown', IMAGES_ITEM, function (event) {
+                if (event.key === ' ') {
+                    event.preventDefault();
+                    ds.toggleSelection($(this));
+                    bindOperates();
+                } else if (event.key === 'Enter') {
+                    event.preventDefault();
+                    $(this).find('img').trigger('click');
+                }
+            });
         </script>
         <script>
             context.init({
@@ -580,6 +600,7 @@
                         inputOptions: {
                             public: '公开',
                             private: '私有',
+                            link: '持链接可访问',
                         },
                         confirmButtonText: '确认设置',
                         inputPlaceholder: '请选择一个权限',
@@ -650,7 +671,7 @@
                 delete() {
                     Swal.fire({
                         title: '确认要删除选中的图片？',
-                        text: "删除后不可恢复，记录和文件同时删除",
+                        text: '图片记录与分享访问将被移除，源文件由后台回收。',
                         icon: 'warning',
                         showCancelButton: true,
                         confirmButtonText: '确认删除',
@@ -678,25 +699,48 @@
                         }
                     });
                 },
+                async share(e) {
+                    const id = $(e).data('id');
+                    try {
+                        const {data} = await axios.post(@json(url('/user/images')) + '/' + id + '/share');
+                        if (!data.status) {
+                            toastr.warning(data.message);
+                            return;
+                        }
+                        Swal.fire({
+                            titleText: '临时分享链接',
+                            text: data.message,
+                            input: 'text',
+                            inputValue: data.data.url,
+                            inputAttributes: {readonly: true, 'aria-label': '临时分享链接'},
+                            showCancelButton: false,
+                            confirmButtonText: '关闭',
+                            didOpen: () => Swal.getInput().select(),
+                        });
+                    } catch {
+                        toastr.error('生成分享链接失败，请稍后重试');
+                    }
+                },
                 detail(e) {
                     let item = $(e).data('json');
                     axios.get(`/user/images/${item.id}`).then(response => {
                         if (response.data.status) {
                             let image = response.data.data.image;
-                            let content = $('#image-detail-tpl').html()
-                                .replace(/__album_name__/g, image.album ? image.album.name : '-')
-                                .replace(/__strategy_name__/g, image.strategy ? image.strategy.name : '-')
-                                .replace(/__filename__/g, image.filename.replace(/\$/g, '$$$$'))
-                                .replace(/__origin_name__/g, image.origin_name.replace(/\$/g, '$$$$'))
-                                .replace(/__size__/g, utils.formatSize(image.size * 1024))
-                                .replace(/__mimetype__/g, image.mimetype)
-                                .replace(/__width__/g, image.width)
-                                .replace(/__height__/g, image.height)
-                                .replace(/__md5__/g, image.md5)
-                                .replace(/__sha1__/g, image.sha1)
-                                .replace(/__permission__/g, image.permission === 1 ? '公开' : '私有')
-                                .replace(/__uploaded_ip__/g, image.uploaded_ip)
-                                .replace(/__created_at__/g, image.created_at)
+                            let content = utils.template($('#image-detail-tpl').html(), {
+                                album_name: image.album?.name || '-',
+                                strategy_name: image.strategy?.name || '-',
+                                filename: image.filename,
+                                origin_name: image.origin_name,
+                                size: utils.formatSize(image.size * 1024),
+                                mimetype: image.mimetype,
+                                width: image.width,
+                                height: image.height,
+                                md5: image.md5,
+                                sha1: image.sha1,
+                                permission: ({0: '私有', 1: '公开', 2: '持链接可访问'})[image.permission],
+                                uploaded_ip: image.uploaded_ip,
+                                created_at: image.created_at,
+                            });
                             drawer.open(item.filename, content);
                         } else {
                             toastr.error(response.data.message);
@@ -846,6 +890,9 @@
                         break;
                     case 'permission': // 设置权限
                         methods.permission();
+                        break;
+                    case 'share':
+                        methods.share(selected[0]);
                         break;
                     case 'detail':
                         methods.detail(selected[0]);

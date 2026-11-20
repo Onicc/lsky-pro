@@ -2,21 +2,18 @@
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="keywords" content="{{ \App\Utils::config(\App\Enums\ConfigKey::SiteKeywords) }}"/>
     <meta name="description" content="{{ \App\Utils::config(\App\Enums\ConfigKey::SiteDescription) }}"/>
 
-    <title>{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</title>
+    <title>@hasSection('title')@yield('title') · @endif{{ config('app.name') }}</title>
 
-    <!-- Fonts -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap">
-    <link rel="stylesheet" href="{{ asset('css/fontawesome.css') }}">
+    <link rel="stylesheet" href="{{ Vite::asset('markdown.css') }}">
     @stack('styles')
 
     <!-- Styles -->
-    <link rel="stylesheet" href="{{ asset('css/common.css') }}?t=20220817">
-    <link rel="stylesheet" href="{{ asset('css/app.css') }}?t=20220817">
+    <link rel="stylesheet" href="{{ Vite::asset('app.css') }}">
 </head>
 <body class="font-sans antialiased overflow-hidden">
 <div class="min-h-screen bg-gray-100" x-data x-cloak>
@@ -38,13 +35,14 @@
     >
 
     </div>
-    <x-container class="flex flex-col overflow-y-auto absolute pb-14 top-14 left-0 right-0 bottom-0 transition-all duration-300 min-h-screen h-full">
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded focus:bg-white focus:px-4 focus:py-2">前往主要内容</a>
+    <x-container id="main-content" role="main" tabindex="-1" class="flex flex-col overflow-y-auto absolute pb-14 top-14 left-0 right-0 bottom-0 transition-all duration-300 min-h-screen h-full">
         {{ $slot }}
     </x-container>
 </div>
 </body>
 <!-- Scripts -->
-<script src="{{ asset('js/app.js') }}?t=20220817"></script>
+<script src="{{ Vite::asset('app.js') }}"></script>
 @include('common.notice')
 <script>
     // 开关组件默认值

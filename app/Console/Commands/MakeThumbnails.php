@@ -3,56 +3,46 @@
 namespace App\Console\Commands;
 
 use App\Models\Image;
-use App\Services\ImageService;
+use App\Services\MediaThumbnails;
 use Illuminate\Console\Command;
-use League\Flysystem\FilesystemException;
-use Symfony\Component\Console\Helper\ProgressBar;
 
 class MakeThumbnails extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
-    protected $signature = 'lsky:thumbnails';
+    protected $signature = 'lsky:thumbnails
+        {--force : Rebuild previously generated thumbnails}
+        {--pending : Process only due pending thumbnails}
+        {--limit=0 : Limit the number of processed images}';
 
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
-    protected $description = 'Make images thumbnails.';
+    protected $description = 'Build private image thumbnails';
 
-    /**
-     * Execute the console command.
-     *
-     * @return int
-     */
-    public function handle()
+    public function handle(MediaThumbnails $thumbnails): int
     {
-        $progress = new ProgressBar($this->output, Image::query()->count());
-        $progress->setMessage('获取图片处理中...');
-        $progress->start();
+        $failed = 0;
+        $processed = 0;
+        $limit = max(0, (int) $this->option('limit'));
+        $query = Image::query()->with('group', 'strategy')->whereNotNull('strategy_id')->where('extension', '<>', 'svg');
+        if ($this->option('pending')) {
+            $query->where('thumbnail_pending_at', '<=', now());
+        }
 
-        $service = new ImageService();
+        foreach ($query->lazyById(100) as $image) {
+            if ($limit && $processed >= $limit) {
+                break;
+            }
+            ++$processed;
 
-        /** @var Image $image */
-        foreach (Image::query()->whereNotNull('strategy_id')->cursor() as $image) {
             try {
-                $service->makeThumbnail(
-                    image: $image,
-                    data: $image->filesystem()->read($image->pathname),
-                    force: true,
-                );
-                $progress->advance();
-            } catch (\Throwable $e) {
-                $this->error("缩略图生成失败, {$e->getMessage()}");
+                $thumbnails->make($image, (bool) $this->option('force'));
+            } catch (\Throwable $exception) {
+                ++$failed;
+                report($exception);
+                $this->warn("Could not build thumbnail for image {$image->key}.");
+                Image::query()->whereKey($image->id)->whereNotNull('thumbnail_pending_at')->increment('thumbnail_attempts', extra: [
+                    'thumbnail_pending_at' => now()->addMinutes(min(1440, 2 ** min(11, $image->thumbnail_attempts))),
+                ]);
             }
         }
 
-        $progress->finish();
-
-        return 0;
+        return $failed ? self::FAILURE : self::SUCCESS;
     }
 }

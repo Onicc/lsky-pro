@@ -17,6 +17,8 @@ use App\Http\Middleware\CheckIsEnableGuestUpload;
 use Illuminate\Support\Facades\Route;
 use App\Http\Middleware\CheckIsInstalled;
 use App\Http\Controllers\Controller;
+use App\Support\Installation;
+use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\User\ImageController;
 use App\Http\Controllers\User\AlbumController;
@@ -32,10 +34,24 @@ use App\Http\Controllers\Admin\ImageController as AdminImageController;
 
 Route::get('/', fn () => view('welcome'))
     ->name('/')
-    ->middleware(CheckIsInstalled::class)
     ->middleware(CheckIsEnableGuestUpload::class);
 
-Route::any('install', [Controller::class, 'install'])->name('install');
+Route::get('install', fn () => Installation::exists() ? redirect()->route('/') : view('install'))
+    ->withoutMiddleware(CheckIsInstalled::class)->name('install');
+Route::get('up', function () {
+    try {
+        $ready = Installation::exists() && DB::table('configs')->exists()
+            && ! array_diff(
+                array_keys(app('migrator')->getMigrationFiles(database_path('migrations'))),
+                DB::table('migrations')->pluck('migration')->all(),
+            );
+    } catch (Throwable) {
+        $ready = false;
+    }
+
+    return response()->json(['status' => $ready ? 'ready' : 'unavailable'], $ready ? 200 : 503)
+        ->header('Cache-Control', 'no-store');
+})->withoutMiddleware(['web', CheckIsInstalled::class]);
 Route::post('upload', [Controller::class, 'upload']);
 Route::group(['middleware' => ['auth']], function () {
     Route::get('dashboard', [UserController::class, 'dashboard'])->name('dashboard');
@@ -59,14 +75,15 @@ Route::group(['middleware' => ['auth']], function () {
     Route::group(['prefix' => 'user'], function () {
         Route::get('images', [ImageController::class, 'images'])->name('user.images');
         Route::get('images/{id}', [ImageController::class, 'image'])->name('user.image');
+    Route::post('images/{id}/share', [ImageController::class, 'share'])->whereNumber('id')->name('user.image.share');
         Route::delete('images', [ImageController::class, 'delete'])->name('user.images.delete');
         Route::put('images/permission', [ImageController::class, 'permission'])->name('user.images.permission');
         Route::put('images/rename', [ImageController::class, 'rename'])->name('user.images.rename');
         Route::put('images/movement', [ImageController::class, 'movement'])->name('user.images.movement');
         Route::get('albums', [AlbumController::class, 'albums'])->name('user.albums');
         Route::post('albums', [AlbumController::class, 'create'])->name('user.album.create');
-        Route::put('albums/{id}', [AlbumController::class, 'update'])->name('user.album.update');
-        Route::delete('albums/{id}', [AlbumController::class, 'delete'])->name('user.album.delete');
+        Route::put('albums/{id}', [AlbumController::class, 'update'])->whereNumber('id')->name('user.album.update');
+        Route::delete('albums/{id}', [AlbumController::class, 'delete'])->whereNumber('id')->name('user.album.delete');
     });
 });
 
@@ -82,8 +99,7 @@ Route::group(['prefix' => 'admin', 'middleware' => ['auth.admin']], function () 
 
     Route::group(['prefix' => 'images'], function () {
         Route::get('', [AdminImageController::class, 'index'])->name('admin.images');
-        Route::put('{id}', [AdminImageController::class, 'update'])->name('admin.image.update');
-        Route::delete('{id}', [AdminImageController::class, 'delete'])->name('admin.image.delete');
+        Route::delete('{id}', [AdminImageController::class, 'delete'])->whereNumber('id')->name('admin.image.delete');
     });
 
     Route::group(['prefix' => 'groups'], function () {
@@ -108,10 +124,7 @@ Route::group(['prefix' => 'admin', 'middleware' => ['auth.admin']], function () 
     Route::group(['prefix' => 'settings'], function () {
         Route::get('', [AdminSettingController::class, 'index'])->name('admin.settings');
         Route::put('save', [AdminSettingController::class, 'save'])->name('admin.settings.save');
-        Route::post('mail-test', [AdminSettingController::class, 'mailTest'])->name('admin.settings.mail.test');
-        Route::get('check-update', [AdminSettingController::class, 'checkUpdate'])->name('admin.settings.check.update');
-        Route::post('upgrade', [AdminSettingController::class, 'upgrade'])->name('admin.settings.upgrade');
-        Route::get('upgrade/progress', [AdminSettingController::class, 'upgradeProgress'])->name('admin.settings.upgrade.progress');
+        Route::post('mail-test', [AdminSettingController::class, 'mailTest'])->middleware('throttle:5,1')->name('admin.settings.mail.test');
     });
 });
 

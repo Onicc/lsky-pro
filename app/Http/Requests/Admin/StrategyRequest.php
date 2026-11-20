@@ -5,7 +5,7 @@ namespace App\Http\Requests\Admin;
 use App\Enums\StrategyKey;
 use App\Http\Requests\FormRequest;
 use App\Models\Strategy;
-use Illuminate\Support\Collection;
+use Illuminate\Validation\Rule;
 
 class StrategyRequest extends FormRequest
 {
@@ -16,99 +16,95 @@ class StrategyRequest extends FormRequest
      */
     public function rules()
     {
+        $existing = $this->isMethod('PUT') ? Strategy::query()->find($this->route('id')) : null;
+        $driver = (int) $this->input('key');
+        $required = fn (string $name) => [
+            Rule::requiredIf($existing?->key !== $driver || ! $existing?->configs->get($name)),
+            'nullable', 'string', 'max:30000',
+        ];
         $checkUrl = function ($attribute, $value, $fail) {
-            if ($this->input('key') == StrategyKey::Local) {
-                $folders = [config('app.thumbnail_path'), 'fonts', 'css', 'js'];
-                $symlink = Strategy::getRootPath($value);
-                if (! $symlink) {
-                    return $fail('访问域名缺少根路径');
-                }
-                if (in_array($symlink, $folders)) {
-                    return $fail('系统保留路径：'. $symlink);
-                }
-                if (false !== strpbrk($symlink, "\\/?%*:|\"<>")) {
-                    return $fail('根路径名称不符合规则');
-                }
-                // 修改时单独判断
-                if ($this->method() === 'PUT') {
-                    $symlinks = Strategy::query()
-                        ->where('id', '<>', $this->route('id'))
-                        ->pluck('configs')
-                        ->transform(function (Collection $configs) {
-                            return Strategy::getRootPath($configs->get('url'));
-                        })->merge($folders)->values()->toArray();
-                    if (in_array($symlink, $symlinks)) {
-                        return $fail('根路径已经存在');
-                    }
-                } else {
-                    if (realpath(public_path($symlink))) {
-                        return $fail('根路径已经存在');
-                    }
-                }
+            $path = Strategy::getRootPath($value);
+            if ($path === '' || ! preg_match('/\A[\p{L}\p{N}_-]+\z/u', $path)) {
+                $fail('本地策略的旧链接地址需要一个有效的路径前缀');
+            } elseif (in_array($path, [config('app.thumbnail_path'), 'fonts', 'css', 'js', 'media'], true)) {
+                $fail('系统保留路径：'.$path);
             }
         };
 
         $array = [
             'groups' => 'array',
+            'groups.*' => 'integer|exists:groups,id',
             'name' => 'required|max:60',
             'intro' => 'max:2000',
-            'key' => 'required|integer',
-            'configs.url' => ['required', 'url'],
-            'configs.queries' => '',
+            'key' => ['required', 'integer', Rule::in(array_keys(Strategy::DRIVERS))],
+            'configs.url' => ['required', 'url:http,https'],
+            'configs.queries' => 'nullable|string|max:2048',
+            'configs.private_objects' => 'nullable|boolean',
         ];
 
         return array_merge($array, match((int)$this->input('key')) {
             StrategyKey::Local => [
-                'configs.url' => ['required', 'url', $checkUrl],
+                'configs.url' => ['required', 'url:http,https', $checkUrl],
                 'configs.root' => ['max:1000', function ($attribute, $value, $fail) {
                     if ($value) {
                         if (! is_dir($value)) {
                             return $fail('储存路径不存在');
                         }
-                        if (! is_writeable($value)) {
+                        if (! is_writable($value)) {
                             return $fail('储存路径没有写入权限');
+                        }
+                        $root = realpath($value);
+                        $public = realpath(public_path());
+                        $application = realpath(base_path());
+                        $storage = realpath(storage_path('app'));
+                        if ($root === $application || $root === $public || str_starts_with($public, $root.'/')
+                            || str_starts_with($root, $public.'/')
+                            || (str_starts_with($root, $application.'/') && ! str_starts_with($root, $storage.'/'))) {
+                            $fail('储存路径必须位于公开目录之外');
                         }
                     }
                 }],
             ],
             StrategyKey::S3 => [
-                'configs.access_key_id' => 'required',
-                'configs.secret_access_key' => 'required',
-                'configs.endpoint' => '',
-                'configs.region' => '',
+                'configs.use_path_style_endpoint' => 'nullable|boolean',
+                'configs.access_key_id' => $required('access_key_id'),
+                'configs.secret_access_key' => $required('secret_access_key'),
+                'configs.endpoint' => 'nullable|url:http,https',
+                'configs.region' => 'nullable|string|max:100',
                 'configs.bucket' => 'required',
             ],
             StrategyKey::Oss => [
-                'configs.access_key_id' => 'required',
-                'configs.access_key_secret' => 'required',
+                'configs.access_key_id' => $required('access_key_id'),
+                'configs.access_key_secret' => $required('access_key_secret'),
                 'configs.endpoint' => 'required',
                 'configs.bucket' => 'required',
             ],
             StrategyKey::Cos => [
                 'configs.app_id' => 'required',
-                'configs.secret_id' => 'required',
-                'configs.secret_key' => 'required',
+                'configs.secret_id' => $required('secret_id'),
+                'configs.secret_key' => $required('secret_key'),
                 'configs.region' => 'required',
                 'configs.bucket' => 'required',
             ],
             StrategyKey::Kodo => [
-                'configs.access_key' => 'required',
-                'configs.secret_key' => 'required',
+                'configs.access_key' => $required('access_key'),
+                'configs.secret_key' => $required('secret_key'),
                 'configs.bucket' => 'required',
             ],
             StrategyKey::Uss => [
                 'configs.service' => 'required',
                 'configs.operator' => 'required',
-                'configs.password' => 'required',
+                'configs.password' => $required('password'),
             ],
             StrategyKey::Sftp => [
                 'configs.root' => 'required',
                 'configs.host' => 'required',
                 'configs.port' => 'integer',
                 'configs.username' => 'required',
-                'configs.password' => 'required_if:configs.private_key,null',
-                'configs.private_key' => 'required_if:configs.password,null',
-                'configs.passphrase' => '',
+                'configs.password' => 'nullable|string|max:30000',
+                'configs.private_key' => 'nullable|string|max:30000',
+                'configs.passphrase' => 'nullable|string|max:30000',
+                'configs.host_fingerprint' => 'nullable|string|max:128',
                 'configs.use_agent' => 'required|boolean',
             ],
             StrategyKey::Ftp => [
@@ -116,25 +112,26 @@ class StrategyRequest extends FormRequest
                 'configs.host' => 'required',
                 'configs.port' => 'integer',
                 'configs.username' => 'required',
-                'configs.password' => 'required',
+                'configs.password' => $required('password'),
                 'configs.ssl' => 'required|boolean',
                 'configs.passive' => 'required|boolean',
             ],
             StrategyKey::Webdav => [
-                'configs.base_uri' => 'required',
+                'configs.base_uri' => 'required|url:http,https',
                 'configs.username' => '',
-                'configs.password' => '',
+                'configs.password' => 'nullable|string|max:30000',
                 'configs.auth_type' => '',
                 'configs.prefix' => '',
             ],
             StrategyKey::Minio => [
-                'configs.access_key' => 'required',
-                'configs.secret_key' => 'required',
-                'configs.endpoint' => '',
-                'configs.region' => '',
+                'configs.access_key' => $required('access_key'),
+                'configs.secret_key' => $required('secret_key'),
+                'configs.endpoint' => 'nullable|url:http,https',
+                'configs.region' => 'nullable|string|max:100',
                 'configs.bucket' => 'required',
-                'configs.bucket_endpoint' => '',
+                'configs.bucket_endpoint' => 'nullable|boolean',
             ],
+            default => [],
         });
     }
 
@@ -216,6 +213,7 @@ class StrategyRequest extends FormRequest
                 'configs.bucket' => 'Bucket 名称',
                 'configs.bucket_endpoint' => 'BucketEndpoint',
             ],
+            default => [],
         });
     }
 }

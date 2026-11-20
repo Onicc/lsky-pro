@@ -76,11 +76,11 @@
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[access_key_id]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>AccessKeyId</label>
-                                <x-input type="text" name="configs[access_key_id]" id="configs[access_key_id]" placeholder="请输入 AccessKeyId" value="{{ $strategy->configs->get('access_key_id') }}" />
+                                <x-input type="text" name="configs[access_key_id]" id="configs[access_key_id]" placeholder="请输入 AccessKeyId" />
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[secret_access_key]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>SecretAccessKey</label>
-                                <x-input type="password" name="configs[secret_access_key]" id="configs[secret_access_key]" placeholder="请输入 SecretAccessKey" value="{{ $strategy->configs->get('secret_access_key') }}" />
+                                <x-input type="password" name="configs[secret_access_key]" id="configs[secret_access_key]" placeholder="请输入 SecretAccessKey" />
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[endpoint]" class="block text-sm font-medium text-gray-700">连接地址</label>
@@ -109,11 +109,11 @@
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[access_key_id]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>AccessKeyId</label>
-                                <x-input type="text" name="configs[access_key_id]" id="configs[access_key_id]" placeholder="请输入 AccessKeyId" value="{{ $strategy->configs->get('access_key_id') }}" />
+                                <x-input type="text" name="configs[access_key_id]" id="configs[access_key_id]" placeholder="请输入 AccessKeyId" />
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[access_key_secret]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>AccessKeySecret</label>
-                                <x-input type="password" name="configs[access_key_secret]" id="configs[access_key_secret]" placeholder="请输入 AccessKeySecret" value="{{ $strategy->configs->get('access_key_secret') }}" />
+                                <x-input type="password" name="configs[access_key_secret]" id="configs[access_key_secret]" placeholder="请输入 AccessKeySecret" />
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[endpoint]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>地域节点(Endpoint)</label>
@@ -142,11 +142,11 @@
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[secret_id]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>SecretId</label>
-                                <x-input type="text" name="configs[secret_id]" id="configs[secret_id]" placeholder="请输入 SecretId" value="{{ $strategy->configs->get('secret_id') }}" />
+                                <x-input type="text" name="configs[secret_id]" id="configs[secret_id]" placeholder="请输入 SecretId" />
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[secret_key]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>SecretKey</label>
-                                <x-input type="password" name="configs[secret_key]" id="configs[secret_key]" placeholder="请输入 SecretKey" value="{{ $strategy->configs->get('secret_key') }}" />
+                                <x-input type="password" name="configs[secret_key]" id="configs[secret_key]" placeholder="请输入 SecretKey" />
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[region]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>所属地域</label>
@@ -172,11 +172,11 @@
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[access_key]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>AccessKey</label>
-                                <x-input type="text" name="configs[access_key]" id="configs[access_key]" placeholder="请输入 AccessKey" value="{{ $strategy->configs->get('access_key') }}" />
+                                <x-input type="text" name="configs[access_key]" id="configs[access_key]" placeholder="请输入 AccessKey" />
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[secret_key]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>SecretKey</label>
-                                <x-input type="password" name="configs[secret_key]" id="configs[secret_key]" placeholder="请输入 SecretKey" value="{{ $strategy->configs->get('secret_key') }}" />
+                                <x-input type="password" name="configs[secret_key]" id="configs[secret_key]" placeholder="请输入 SecretKey" />
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[bucket]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>Bucket</label>
@@ -205,7 +205,7 @@
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[password]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>操作员密码</label>
-                                <x-input type="password" name="configs[password]" id="configs[password]" placeholder="请输入操作员密码" value="{{ $strategy->configs->get('password') }}" />
+                                <x-input type="password" name="configs[password]" id="configs[password]" placeholder="请输入操作员密码" />
                             </div>
                         </div>
                         @endif
@@ -238,15 +238,15 @@
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[password]" class="block text-sm font-medium text-gray-700"><span class="text-yellow-500">*</span>密码</label>
-                                <x-input type="password" name="configs[password]" id="configs[password]" placeholder="如果使用私钥连接，可为空" value="{{ $strategy->configs->get('password') }}" />
+                                <x-input type="password" name="configs[password]" id="configs[password]" placeholder="如果使用私钥连接，可为空" />
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[private_key]" class="block text-sm font-medium text-gray-700"><span class="text-yellow-500">*</span>私钥</label>
-                                <x-textarea name="configs[private_key]" id="configs[private_key]" placeholder="输入私钥文本内容，如果使用密码连接，可为空">{{ $strategy->configs->get('private_key') }}</x-textarea>
+                                <x-textarea name="configs[private_key]" id="configs[private_key]" placeholder="输入私钥文本内容，如果使用密码连接，可为空"></x-textarea>
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[passphrase]" class="block text-sm font-medium text-gray-700">私钥口令</label>
-                                <x-input type="password" name="configs[passphrase]" id="configs[passphrase]" placeholder="如果未设置私钥或私钥未设置口令，可为空" value="{{ $strategy->configs->get('passphrase') }}" />
+                                <x-input type="password" name="configs[passphrase]" id="configs[passphrase]" placeholder="如果未设置私钥或私钥未设置口令，可为空" />
                             </div>
                             <div class="col-span-6">
                                 <label for="configs[use_agent]" class="block text-sm font-medium mb-2 text-gray-700">是否使用代理</label>
@@ -289,7 +289,7 @@
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[password]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>密码</label>
-                                <x-input type="password" name="configs[password]" id="configs[password]" placeholder="请输入密码" value="{{ $strategy->configs->get('password') }}" />
+                                <x-input type="password" name="configs[password]" id="configs[password]" placeholder="请输入密码" />
                             </div>
                             <div class="col-span-6">
                                 <label for="configs[ssl]" class="block text-sm font-medium mb-2 text-gray-700">加密连接</label>
@@ -334,7 +334,7 @@
                             </div>
                             <div class="col-span-3 sm:col-span-2 mb-4">
                                 <label for="configs[password]" class="block text-sm font-medium text-gray-700">密码</label>
-                                <x-input type="password" name="configs[password]" id="configs[password]" placeholder="请输入密码" value="{{ $strategy->configs->get('password') }}" />
+                                <x-input type="password" name="configs[password]" id="configs[password]" placeholder="请输入密码" />
                             </div>
                         </div>
                         @endif
@@ -351,11 +351,11 @@
                                 </div>
                                 <div class="col-span-3 sm:col-span-2 mb-4">
                                     <label for="configs[access_key]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>AccessKey</label>
-                                    <x-input type="text" name="configs[access_key]" id="configs[access_key]" placeholder="请输入 AccessKey" value="{{ $strategy->configs->get('access_key') }}" />
+                                    <x-input type="text" name="configs[access_key]" id="configs[access_key]" placeholder="请输入 AccessKey" />
                                 </div>
                                 <div class="col-span-3 sm:col-span-2 mb-4">
                                     <label for="configs[secret_key]" class="block text-sm font-medium text-gray-700"><span class="text-red-600">*</span>SecretKey</label>
-                                    <x-input type="password" name="configs[secret_key]" id="configs[secret_key]" placeholder="请输入 SecretKey" value="{{ $strategy->configs->get('secret_key') }}" />
+                                    <x-input type="password" name="configs[secret_key]" id="configs[secret_key]" placeholder="请输入 SecretKey" />
                                 </div>
                                 <div class="col-span-3 sm:col-span-2 mb-4">
                                     <label for="configs[endpoint]" class="block text-sm font-medium text-gray-700">连接地址</label>
@@ -376,6 +376,12 @@
                                 </div>
                             </div>
                         @endif
+                    </div>
+                    <div class="px-4 py-3 text-sm sm:px-6">
+                        <p class="my-2 text-gray-700">留空的凭证字段会保留已有值。</p>
+                        <x-fieldset-checkbox id="configs-private-objects" name="configs[private_objects]" value="1" :checked="(bool) $strategy->configs->get('private_objects')">
+                            此储存的内部图片路径已禁止匿名读取，可保存私有图片
+                        </x-fieldset-checkbox>
                     </div>
                     <div class="px-4 py-3 bg-gray-50 text-right sm:px-6">
                         <x-button type="button" class="bg-gray-500" onclick="history.go(-1)">取消</x-button>

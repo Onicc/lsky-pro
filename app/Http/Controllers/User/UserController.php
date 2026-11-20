@@ -45,9 +45,12 @@ class UserController extends Controller
                 'remember_token' => Str::random(60),
             ]);
 
+        }
+        $user->saveOrFail();
+        if ($password) {
             event(new PasswordReset($user));
         }
-        $user->save();
+
         return $this->success('保存成功');
     }
 

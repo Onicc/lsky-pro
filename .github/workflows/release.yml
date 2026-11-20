@@ -1,0 +1,67 @@
+name: Publish Docker Hub release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dockerhub-release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    uses: ./.github/workflows/main.yml
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate release version and build image
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            printf 'Release tags must have the form vMAJOR.MINOR.PATCH\n' >&2
+            exit 1
+          fi
+          docker build --tag lsky-pro:publish-candidate \
+            --label "org.opencontainers.image.version=${GITHUB_REF_NAME#v}" \
+            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label 'org.opencontainers.image.licenses=GPL-3.0-only' .
+          scripts/smoke-container.sh lsky-pro:publish-candidate
+      - name: Publish and verify Docker Hub digests
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          : "${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}"
+          : "${DOCKERHUB_TOKEN:?DOCKERHUB_TOKEN is required}"
+          registry_image="${DOCKERHUB_USERNAME,,}/lsky-pro"
+          version="${GITHUB_REF_NAME#v}"
+          printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+          trap 'docker logout >/dev/null' EXIT
+
+          for tag in "$version" latest; do
+            image="$registry_image:$tag"
+            docker tag lsky-pro:publish-candidate "$image"
+            push_result=$(docker push "$image")
+            printf '%s\n' "$push_result"
+            expected=$(docker image inspect --format '{{.Id}}' "$image")
+            expected_manifest=$(awk '/ digest: sha256:/ {print $3}' <<< "$push_result")
+            manifest=$(docker buildx imagetools inspect "$image" --raw)
+            if jq -e 'has("manifests")' >/dev/null <<< "$manifest"; then
+              platform_manifest=$(jq -er '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64").digest' <<< "$manifest")
+              manifest=$(docker buildx imagetools inspect "$registry_image@$platform_manifest" --raw)
+            fi
+            actual=$(jq -er '.config.digest' <<< "$manifest")
+            published_manifest=$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')
+            test "$actual" = "$expected"
+            test "$published_manifest" = "$expected_manifest"
+            printf '%s → `%s`\n' "$tag" "$published_manifest" >> "$GITHUB_STEP_SUMMARY"
+          done

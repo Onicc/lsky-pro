@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\AlbumRequest;
 use App\Models\Album;
 use App\Models\User;
+use App\Services\AlbumService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
@@ -17,7 +18,7 @@ class AlbumController extends Controller
     {
         /** @var User $user */
         $user = Auth::user();
-        $albums = $user->albums()->latest()->paginate(40);
+        $albums = $user->albums()->latest()->orderByDesc('id')->paginate(40);
         $albums->getCollection()->each(function (Album $album) {
             $album->setVisible(['id', 'name', 'intro', 'image_num']);
         });
@@ -29,9 +30,10 @@ class AlbumController extends Controller
         /** @var User $user */
         $user = Auth::user();
         DB::transaction(function () use ($user, $request) {
-            $user->albums()->create(array_filter($request->validated()));
-            $user->album_num = $user->albums()->count();
-            $user->save();
+            $owner = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
+            $owner->albums()->create($this->attributes($request));
+            $owner->album_num = $owner->albums()->count();
+            $owner->saveOrFail();
         });
 
         return $this->success('创建成功');
@@ -45,25 +47,24 @@ class AlbumController extends Controller
         if (is_null($album)) {
             return $this->fail('不存在的相册');
         }
-        $album->update(array_filter($request->validated()));
+        $album->update($this->attributes($request));
         return $this->success('修改成功');
     }
 
-    public function delete(Request $request): Response
+    private function attributes(AlbumRequest $request): array
     {
-        /** @var User $user */
-        $user = Auth::user();
-        /** @var Album|null $album */
-        $album = $user->albums()->find($request->route('id'));
-        if (is_null($album)) {
-            return $this->fail('不存在的相册');
+        $validated = $request->validated();
+        if (array_key_exists('intro', $validated)) {
+            $validated['intro'] ??= '';
         }
-        DB::transaction(function () use ($user, $album) {
-            $album->images()->update(['album_id' => null]);
-            $album->delete();
-            $user->album_num = $user->albums()->count();
-            $user->save();
-        });
-        return $this->success('删除成功');
+
+        return $validated;
+    }
+
+    public function delete(Request $request, AlbumService $albums): Response
+    {
+        return $albums->delete($request->user(), (int) $request->route('id'))
+            ? $this->success('删除成功')
+            : $this->fail('不存在的相册');
     }
 }

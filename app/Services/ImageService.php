@@ -23,12 +23,10 @@ use App\Enums\Strategy\WebDavOption;
 use App\Enums\StrategyKey;
 use App\Enums\UserConfigKey;
 use App\Enums\UserStatus;
-use App\Enums\Watermark\FontOption;
-use App\Enums\Watermark\ImageOption;
-use App\Enums\Watermark\Mode;
 use App\Exceptions\UploadException;
 use App\Models\Group;
 use App\Models\Image;
+use App\Models\MediaWrite;
 use App\Models\Strategy;
 use App\Models\User;
 use App\Utils;
@@ -38,17 +36,14 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Str;
-use Intervention\Image\Facades\Image as InterventionImage;
-use Intervention\Image\Imagick\Font;
-use Intervention\Image\ImageManager;
+use Illuminate\Support\Facades\URL;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use League\Flysystem\Filesystem;
 use League\Flysystem\FilesystemAdapter;
-use League\Flysystem\FilesystemException;
 use League\Flysystem\Ftp\FtpAdapter;
 use League\Flysystem\Ftp\FtpConnectionOptions;
 use League\Flysystem\Local\LocalFilesystemAdapter;
@@ -69,217 +64,354 @@ use OSS\OssClient;
 
 class ImageService
 {
-    /**
-     * @param  Request  $request
-     * @return Image
-     * @throws UploadException
-     */
+    public function __construct(private readonly ImageProcessor $processor = new ImageProcessor())
+    {
+    }
+
     public function store(Request $request): Image
     {
         $file = $request->file('file');
+        if (! $file instanceof UploadedFile || ! $file->isValid()) {
+            throw new UploadException('请选择一个有效的图片文件');
+        }
 
-        if (Auth::guest() && !Utils::config(ConfigKey::IsAllowGuestUpload, true)) {
+        $user = $request->user();
+        if (! $user && ! Utils::config(ConfigKey::IsAllowGuestUpload, false)) {
             throw new UploadException('管理员关闭了游客上传');
         }
 
-        $image = new Image();
-        /** @var User|null $user */
-        $user = $request->user();
-
-        /** @var Group $group */
-        $group = ! is_null($user) ? $user->group : Group::query()->where('is_guest', true)->first();
-        // 组配置
-        $configs = $group->configs;
-        // 储存策略
-        $strategies = $group->strategies()->get();
-        if ($strategies->isEmpty()) {
-            throw new UploadException('没有可用的储存，请联系管理员。');
+        $group = $user ? $user->group : Group::query()->where('is_guest', true)->first();
+        if (! $group) {
+            throw new UploadException('没有可用的上传角色组，请联系管理员');
         }
 
+        $configs = $group->configs;
         $extension = strtolower($file->getClientOriginalExtension());
+        $sourcePath = $file->getPathname();
+        $maximumBytes = min((int) config('image.max_upload_bytes'), (int) ($configs->get(GroupConfigKey::MaximumFileSize) * 1024));
 
-        if (! in_array($extension, $configs->get(GroupConfigKey::AcceptedFileSuffixes))) {
+        if (! in_array($extension, ImageProcessor::SUPPORTED_EXTENSIONS, true)
+            || ! in_array($extension, (array) $configs->get(GroupConfigKey::AcceptedFileSuffixes), true)) {
             throw new UploadException('不支持的文件类型');
         }
 
-        if ($file->getSize() / 1024 > $configs->get(GroupConfigKey::MaximumFileSize)) {
-            throw new UploadException("图片大小超出限制");
+        if ($file->getSize() > $maximumBytes) {
+            throw new UploadException('图片大小超出限制');
         }
 
-        // 图片所属组
-        $image->group_id = $group->id;
-        // 图片默认权限
-        $image->permission = ImagePermission::Private;
-
-        if ($request->has('strategy_id')) {
-            if (! $strategy = $strategies->find($request->input('strategy_id'))) {
-                throw new UploadException('选定的策略不存在');
-            }
-        } else {
-            // 没有指定则选择第一个策略
-            $strategy = $strategies->first();
-        }
-
-        $image->strategy_id = $strategy->id;
-
-        // 默认储存策略
-        if (! is_null($user)) {
+        if ($user) {
             if (Utils::config(ConfigKey::IsUserNeedVerify) && ! $user->email_verified_at) {
                 throw new UploadException('账户未验证');
             }
-
             if ($user->status !== UserStatus::Normal) {
                 throw new UploadException('账号状态异常');
             }
-
-            if ($file->getSize() / 1024 + $user->images()->sum('size') > $user->capacity) {
-                throw new UploadException('储存空间不足');
-            }
-
-            // 图片保存至默认相册(若有)
-            if ($albumId = $user->configs->get(UserConfigKey::DefaultAlbum)) {
-                if ($user->albums()->where('id', $albumId)->exists()) {
-                    $image->album_id = $albumId;
-                }
-            }
-
-            $image->user_id = $user->id;
-            // 用户设置的图片默认权限
-            $image->permission = $user->configs->get(UserConfigKey::DefaultPermission, ImagePermission::Private);
         }
 
-        // 上传频率限制
+        $strategy = $this->selectStrategy($request, $group, $user);
+        $permission = $this->selectPermission($request, $user);
+        if ($permission === ImagePermission::Private && ! $strategy->supportsPrivateMedia()) {
+            throw new UploadException('该储存策略未配置私有访问，请选择支持私有访问的储存');
+        }
+
+        $albumId = $request->input('album_id', $user?->configs->get(UserConfigKey::DefaultAlbum));
+        if ($albumId && (! $user || ! is_scalar($albumId) || ! ctype_digit((string) $albumId) || ! $user->albums()->whereKey($albumId)->exists())) {
+            if ($request->has('album_id')) {
+                throw new UploadException('相册不存在或无权访问');
+            }
+            $albumId = null;
+        }
+
+        $image = new Image();
+        $image->key = bin2hex(random_bytes(16));
+        $image->group_id = $group->id;
+        $image->strategy_id = $strategy->id;
+        $image->user_id = $user?->id;
+        $image->album_id = $albumId ?: null;
+        $image->permission = $permission;
+        $image->object_managed = true;
+        $image->thumbnail_pending_at = now();
+        $image->setRelation('strategy', $strategy);
+
+        $requestKey = $request->header('Idempotency-Key');
+        if ($requestKey !== null) {
+            if (! preg_match('/\A[a-zA-Z0-9_-]{16,128}\z/', $requestKey)) {
+                throw new UploadException('上传请求标识格式不正确');
+            }
+            $owner = $user ? 'user:'.$user->id : 'ip:'.$request->ip();
+            $image->idempotency_key = hash('sha256', $owner.':'.$requestKey);
+            $image->request_fingerprint = hash('sha256', json_encode([
+                hash_file('sha256', $sourcePath),
+                $file->getClientOriginalName(),
+                $strategy->id,
+                $image->album_id,
+                $permission,
+            ], JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR));
+
+            if ($previous = $this->previousUpload($image)) {
+                return $previous;
+            }
+            $this->checkPendingRequest($image);
+        }
+
         $this->rateLimiter($configs, $request);
-
-        // 图片处理，跳过 ico gif svg
-        if (! in_array($extension, ['ico', 'gif', 'svg'])) {
-            // 图片保存质量与格式
-            $quality = $configs->get(GroupConfigKey::ImageSaveQuality, 75);
-            $format = $configs->get(GroupConfigKey::ImageSaveFormat);
-            if ($quality < 100 || $format) {
-                // 获取拓展名，判断是否需要转换
-                $format = $format ?: $extension;
-                $filename = Str::replaceLast($extension, $format, $file->getClientOriginalName());
-                $handleImage = InterventionImage::make($file)->save('tmp_' . md5_file($file->getRealPath()), $quality);
-                $file = new UploadedFile($handleImage->basePath(), $filename, $handleImage->mime());
-                // 重新设置拓展名
-                $extension = $format;
-                $handleImage->destroy();
-            }
-
-            // 是否启用水印，覆盖原图片
-            if (
-                $configs->get(GroupConfigKey::IsEnableWatermark) &&
-                collect($configs->get(GroupConfigKey::WatermarkConfigs))->get('mode', Mode::Overlay) == Mode::Overlay
-            ) {
-                $watermarkImage = $this->stickWatermark($file, collect($configs->get(GroupConfigKey::WatermarkConfigs)));
-                $watermarkImage->save();
-                $file = new UploadedFile($watermarkImage->basePath(), $file->getClientOriginalName(), $file->getMimeType());
-                $watermarkImage->destroy();
-            }
-        }
-
-        $filename = $this->replacePathname(
-            $configs->get(GroupConfigKey::PathNamingRule).'/'.$configs->get(GroupConfigKey::FileNamingRule), $file,
-        );
-        $pathname = $filename.".{$extension}";
-
-        [$width, $height] = @getimagesize($file->getRealPath()) ?: [400, 400];
-
-        $image->fill([
-            'md5' => md5_file($file->getRealPath()),
-            'sha1' => sha1_file($file->getRealPath()),
-            'path' => $configs->get(GroupConfigKey::PathNamingRule) ? dirname($pathname) : '',
-            'name' => basename($pathname),
-            'origin_name' => $file->getClientOriginalName(),
-            'size' => $file->getSize() / 1024,
-            'mimetype' => $file->getMimeType(),
-            'extension' => strtolower($extension),
-            'width' => $width,
-            'height' => $height,
-            'is_unhealthy' => false,
-            'uploaded_ip' => $request->ip(),
-        ]);
-
-        $filesystem = new Filesystem($this->getAdapter($strategy));
-
-        // 检测该策略是否存在该图片，有则只创建记录不保存文件
-        /** @var Image $existing */
-        $existing = Image::query()->when($image->strategy_id, function (Builder $builder, $id) {
-            $builder->where('strategy_id', $id);
-        })->where('md5', $image->md5)->where('sha1', $image->sha1)->first();
-        if (is_null($existing)) {
-            $handle = fopen($file, 'r');
-            try {
-                $filesystem->writeStream($pathname, $handle);
-            } catch (FilesystemException $e) {
-                Utils::e($e, '保存图片时出现异常');
-                throw new UploadException(config('app.debug', false) ? $e->getMessage() : '图片上传失败');
-            }
-            if (is_resource($handle)) @fclose($handle);
-        } else {
-            $image->fill($existing->only('path', 'name'));
-        }
-
-        // 增加当前用户的图片数量和相册图片数量
-        $updateNum = function ($method) use ($user, $image) {
-            DB::transaction(function () use ($method, $user, $image) {
-                if (! is_null($user)) {
-                    $user->{$method}('image_num');
-                }
-                if (! is_null($image->album)) {
-                    $image->album->{$method}('image_num');
-                }
-            });
-        };
+        $temporaryPath = null;
 
         try {
-            // 图片记录保存失败，删除物理文件
-            if (! $image->save()) {
-                if (is_null($existing)) $filesystem->delete($image->pathname);
-                throw new \Exception('图片记录保存失败');
+            [$extension, $encoded] = $this->processor->prepare($sourcePath, $extension, $configs);
+            if ($encoded) {
+                if ($encoded->size() > config('image.max_upload_bytes')) {
+                    throw new UploadException('处理后的图片大小超出限制');
+                }
+                $temporaryPath = tempnam(sys_get_temp_dir(), 'lsky-image-');
+                if ($temporaryPath === false) {
+                    throw new UploadException('暂时无法创建图片处理文件');
+                }
+                $encoded->save($temporaryPath);
             }
-            $updateNum('increment');
-        } catch (\Throwable $e) {
-            Utils::e($e, '保存图片记录时出现异常');
-            throw new UploadException('图片记录保存失败');
-        }
+            $path = $temporaryPath ?: $sourcePath;
 
-        // 图片检测，跳过 tif、ico、psd、svg 格式
-        if ($configs->get(GroupConfigKey::IsEnableScan) && ! in_array($extension, ['psd', 'ico', 'tif', 'svg'])) {
-            $scanConfigs = $configs->get(GroupConfigKey::ScanConfigs);
-            if ($this->scan(
-                driver: $scanConfigs['driver'],
-                configs: collect($scanConfigs['drivers'][$scanConfigs['driver']]),
-                image: $image,
-                file: $file,
-            )) {
-                // 标记 or 删除
-                if ($configs->get(GroupConfigKey::ScannedAction) === 'delete') {
-                    $image->delete();
-                    $updateNum('decrement');
-                    throw new UploadException('图片涉嫌违规，禁止上传。');
-                } else {
-                    $image->is_unhealthy = true;
-                    $image->save();
+            [$width, $height, $mimetype] = $this->processor->inspect($path, $extension);
+            $name = $this->objectName($configs, $file, $image->key, $extension, $user?->id);
+            $directory = dirname($name);
+
+            $image->fill([
+                'md5' => hash_file('md5', $path),
+                'sha1' => hash_file('sha1', $path),
+                'sha256' => hash_file('sha256', $path),
+                'path' => $directory === '.' ? '' : $directory,
+                'name' => basename($name),
+                'origin_name' => mb_substr(mb_convert_encoding($file->getClientOriginalName(), 'UTF-8', 'UTF-8'), 0, 255),
+                'size' => ceil(filesize($path) * 100 / 1024) / 100,
+                'mimetype' => $mimetype,
+                'extension' => $extension,
+                'width' => $width,
+                'height' => $height,
+                'is_unhealthy' => false,
+                'uploaded_ip' => $request->ip(),
+            ]);
+
+            if ($configs->get(GroupConfigKey::IsEnableScan)) {
+                $settings = (array) $configs->get(GroupConfigKey::ScanConfigs, []);
+                $driver = (string) ($settings['driver'] ?? '');
+                $image->is_unhealthy = $this->scan($driver, collect($settings['drivers'][$driver] ?? []), $image, $path);
+                if ($image->is_unhealthy && $configs->get(GroupConfigKey::ScannedAction) === 'delete') {
+                    throw new UploadException('图片涉嫌违规，禁止上传');
                 }
             }
+
+            return $this->persist($image, $strategy, $path);
+        } finally {
+            if ($temporaryPath) {
+                @unlink($temporaryPath);
+            }
         }
-
-        $this->makeThumbnail($image, $file);
-
-        // 上传完成后删除临时文件
-        unlink($file->getPathname());
-
-        return $image;
     }
 
-    public function getAdapter(Strategy $strategy): FilesystemAdapter
+    private function selectStrategy(Request $request, Group $group, ?User $user): Strategy
+    {
+        $strategies = $group->strategies();
+
+        if ($request->filled('strategy_id')) {
+            $id = $request->input('strategy_id');
+            if (! is_scalar($id) || ! ctype_digit((string) $id) || ! $strategy = $strategies->find($id)) {
+                throw new UploadException('选定的策略不存在');
+            }
+
+            return $strategy;
+        }
+
+        $default = $user?->configs->get(UserConfigKey::DefaultStrategy);
+        if ($default && $strategy = $group->strategies()->find($default)) {
+            return $strategy;
+        }
+
+        return $strategies->orderBy('strategies.id')->first()
+            ?? throw new UploadException('没有可用的储存，请联系管理员');
+    }
+
+    private function selectPermission(Request $request, ?User $user): int
+    {
+        if (! $user) {
+            return ImagePermission::LinkOnly;
+        }
+
+        $permission = $request->input('permission', $user->configs->get(UserConfigKey::DefaultPermission, ImagePermission::LinkOnly));
+
+        if (! is_scalar($permission) || ! in_array((string) $permission, ImagePermission::VALUES, true)) {
+            throw new UploadException('图片访问权限无效');
+        }
+
+        return (int) $permission;
+    }
+
+    private function previousUpload(Image $image): ?Image
+    {
+        if (! $image->idempotency_key) {
+            return null;
+        }
+
+        $previous = Image::query()->where('idempotency_key', $image->idempotency_key)->first();
+        if ($previous && $previous->request_fingerprint !== $image->request_fingerprint) {
+            throw new UploadException('此上传标识已经用于另一张图片');
+        }
+
+        return $previous;
+    }
+
+    private function persist(Image $image, Strategy $strategy, string $path): Image
+    {
+        $reservation = null;
+
+        try {
+            $reservation = $this->reserveWrite($image, $strategy);
+            if ($reservation instanceof Image) {
+                return $reservation;
+            }
+
+            $filesystem = $image->filesystem();
+            $storageKey = $image->storagePath();
+            if ($filesystem->fileExists($storageKey)) {
+                throw new UploadException('无法保留图片的储存位置，请重试');
+            }
+
+            $handle = fopen($path, 'rb');
+            if ($handle === false) {
+                throw new UploadException('无法打开待上传图片');
+            }
+
+            try {
+                // The durable journal precedes the write so a stopped worker can be recovered.
+                $reserved = MediaWrite::query()->whereKey($reservation->id)->where('expires_at', '>', now())
+                    ->update(['write_attempted' => true]);
+                if (! $reserved) {
+                    throw new UploadException('上传请求已超时，请重试');
+                }
+
+                $filesystem->writeStream($storageKey, $handle, ['mimetype' => $image->mimetype, 'visibility' => 'private']);
+            } finally {
+                if (is_resource($handle)) {
+                    fclose($handle);
+                }
+            }
+
+            return $this->finishWrite($image, $reservation);
+        } catch (\Throwable $exception) {
+            if ($reservation instanceof MediaWrite) {
+                try {
+                    DB::transaction(function () use ($reservation) {
+                        MediaWrite::query()->whereKey($reservation->id)->lockForUpdate()->first()?->retire();
+                    }, 3);
+                } catch (\Throwable $cleanupException) {
+                    Utils::e($cleanupException, '无法立即安排图片清理');
+                }
+            }
+
+            if ($previous = $this->previousUpload($image)) {
+                return $previous;
+            }
+            $this->checkPendingRequest($image);
+
+            if ($exception instanceof UploadException) {
+                throw $exception;
+            }
+
+            Utils::e($exception, '保存图片失败');
+            throw new UploadException('图片保存失败，请稍后重试', previous: $exception);
+        }
+    }
+
+    private function reserveWrite(Image $image, Strategy $strategy): Image|MediaWrite
+    {
+        return DB::transaction(function () use ($image, $strategy) {
+            $owner = $this->lockOwner($image);
+
+            if ($previous = $this->previousUpload($image)) {
+                return $previous;
+            }
+            $this->checkPendingRequest($image);
+
+            if ($owner) {
+                $pendingSize = MediaWrite::query()->where('user_id', $owner->id)->where('expires_at', '>', now())->sum('size');
+                if ($image->size + $pendingSize + $owner->images()->sum('size') > $owner->capacity) {
+                    throw new UploadException('储存空间不足');
+                }
+            }
+
+            $current = Strategy::query()->whereKey($strategy->id)->sharedLock()->firstOrFail();
+            if ($current->key !== $strategy->key || $current->configs->all() !== $strategy->configs->all()) {
+                throw new UploadException('储存策略刚刚变更，请重试');
+            }
+
+            return MediaWrite::query()->create([
+                'user_id' => $image->user_id,
+                'strategy_id' => $image->strategy_id,
+                'image_key' => $image->key,
+                'path' => $image->path,
+                'name' => $image->name,
+                'size' => $image->size,
+                'idempotency_key' => $image->idempotency_key,
+                'request_fingerprint' => $image->request_fingerprint,
+                'expires_at' => now()->addHour(),
+            ]);
+        }, 3);
+    }
+
+    private function finishWrite(Image $image, MediaWrite $reservation): Image
+    {
+        return DB::transaction(function () use ($image, $reservation) {
+            $owner = $this->lockOwner($image);
+            $pending = MediaWrite::query()->whereKey($reservation->id)->lockForUpdate()->first();
+            if (! $pending || $pending->expires_at->isPast()) {
+                throw new UploadException('上传请求已超时，请重试');
+            }
+
+            $image->saveOrFail();
+            $owner?->increment('image_num');
+            $image->album?->increment('image_num');
+            $pending->delete();
+
+            return $image;
+        });
+    }
+
+    private function lockOwner(Image $image): ?User
+    {
+        if (! $image->user_id) {
+            return null;
+        }
+
+        $owner = User::query()->whereKey($image->user_id)->lockForUpdate()->first();
+        if (! $owner || $owner->status !== UserStatus::Normal) {
+            throw new UploadException('账号状态异常');
+        }
+        if (Utils::config(ConfigKey::IsUserNeedVerify) && ! $owner->email_verified_at) {
+            throw new UploadException('账户未验证');
+        }
+
+        return $owner;
+    }
+
+    private function checkPendingRequest(Image $image): void
+    {
+        if (! $image->idempotency_key) {
+            return;
+        }
+
+        $writing = MediaWrite::query()->where('idempotency_key', $image->idempotency_key)->first();
+        if ($writing) {
+            throw new UploadException($writing->request_fingerprint === $image->request_fingerprint
+                ? '该图片的上传请求仍在处理，请稍后重试'
+                : '此上传标识已经用于另一张图片');
+        }
+    }
+
+    public function getAdapter(Strategy $strategy, bool $managed = false): FilesystemAdapter
     {
         $configs = $strategy->configs;
         return match ($strategy->key) {
             StrategyKey::Local => new LocalFilesystemAdapter(
-                location: $configs->get(LocalOption::Root) ?: config('filesystems.disks.uploads.root')
+                location: $this->localRoot($configs->get(LocalOption::Root), $managed)
             ),
             StrategyKey::S3 => new AwsS3V3Adapter(
                 client: new S3Client([
@@ -287,9 +419,12 @@ class ImageService
                         'key'    => $configs->get(S3Option::AccessKeyId),
                         'secret' => $configs->get(S3Option::SecretAccessKey)
                     ],
-                    'endpoint' => $configs->get(S3Option::Endpoint),
-                    'region' => $configs->get(S3Option::Region),
+                    'endpoint' => $configs->get(S3Option::Endpoint) ?: null,
+                    'region' => $configs->get(S3Option::Region) ?: 'us-east-1',
+                    'use_path_style_endpoint' => (bool) $configs->get('use_path_style_endpoint', false),
                     'version' => '2006-03-01',
+                    'http' => ['connect_timeout' => 5, 'timeout' => 45],
+                    'retries' => 2,
                 ]),
                 bucket: $configs->get(S3Option::Bucket),
             ),
@@ -323,8 +458,9 @@ class ImageService
                     password: $configs->get(SftpOption::Password),
                     privateKey: $configs->get(SftpOption::PrivateKey),
                     passphrase: (string)$configs->get(SftpOption::Passphrase),
-                    port: (int)$configs->get(SftpOption::Port),
-                    useAgent: (bool)$configs->get(SftpOption::UseAgent)
+                    port: (int) ($configs->get(SftpOption::Port) ?: 22),
+                    useAgent: (bool) $configs->get(SftpOption::UseAgent),
+                    hostFingerprint: $configs->get('host_fingerprint') ?: null
                 ),
                 root: $configs->get(SftpOption::Root),
             ),
@@ -353,13 +489,27 @@ class ImageService
                         'secret' => $configs->get(MinioOption::SecretKey)
                     ],
                     'endpoint' => $configs->get(MinioOption::Endpoint),
-                    'region' => $configs->get(MinioOption::Region),
+                    'region' => $configs->get(MinioOption::Region) ?: 'us-east-1',
+                    'use_path_style_endpoint' => ! $configs->get(MinioOption::BucketEndpoint),
                     'version' => '2006-03-01',
+                    'http' => ['connect_timeout' => 5, 'timeout' => 45],
+                    'retries' => 2,
                     'bucket_endpoint' => (bool)$configs->get(MinioOption::BucketEndpoint),
                 ]),
                 bucket: $configs->get(MinioOption::Bucket),
             ),
         };
+    }
+
+    private function localRoot(?string $root, bool $managed): string
+    {
+        $legacy = config('filesystems.disks.uploads.root');
+
+        if ($managed && (! $root || $root === $legacy)) {
+            return config('image.private_root').'/objects';
+        }
+
+        return $root ?: $legacy;
     }
 
     /**
@@ -379,7 +529,11 @@ class ImageService
         ];
 
         foreach ($array as $key => $item) {
-            $value = $configs->get($item['key'], 0);
+            $value = (int) $configs->get($item['key'], 0);
+            if ($value < 1) {
+                continue;
+            }
+
             $count = Image::query()->whereBetween('created_at', [
                 $carbon->parse("-1 {$key}"), $carbon,
             ])->when(! is_null($user), function (Builder $builder) use ($user) {
@@ -388,265 +542,154 @@ class ImageService
                 $builder->where('uploaded_ip', $request->ip())->whereNull('user_id');
             })->count();
 
-            if ($value && $count >= $value) {
+            if ($count >= $value) {
                 throw new UploadException("每{$item['str']}内你最多可以上传 {$value} 张图片");
             }
         }
     }
 
-    /**
-     * 检测图片是否违规
-     *
-     * @param $driver
-     * @param  Collection  $configs
-     * @param  Image  $image
-     * @param  UploadedFile $file
-     * @return bool true=违规
-     * @throws UploadException
-     */
-    public function scan($driver, Collection $configs, Image $image, UploadedFile $file): bool
+    protected function scan(string $driver, Collection $configs, Image $image, string $path): bool
     {
-        $flag = false;
         try {
-            if ($driver === 'tencent') {
-                // 图片大小不得超过 5mb
-                if ($file->getSize() >= 5242880) {
-                    return false;
-                }
-
-                $cred = new Credential($configs->get(TencentOption::SecretId), $configs->get(TencentOption::SecretKey));
-                $httpProfile = new HttpProfile();
-                $httpProfile->setEndpoint($configs->get(TencentOption::Endpoint));
-                $clientProfile = new ClientProfile();
-                $clientProfile->setHttpProfile($httpProfile);
-                $client = new ImsClient($cred, $configs->get(TencentOption::Region), $clientProfile);
-                $req = new ImageModerationRequest();
-                $params = [
-                    "FileContent" => base64_encode($file->getContent()),
-                ];
-                if ($configs->get(TencentOption::BizType)) {
-                    $params['BizType'] = $configs->get(TencentOption::BizType);
-                }
-                $req->fromJsonString(json_encode($params));
-                $resp = $client->ImageModeration($req);
-
-                if ($resp->getSuggestion() === 'Block') {
-                    $flag = true;
-                }
-            }
-
-            if ($driver === 'aliyun') {
-                // 20 mb以内、宽高不超过 30000px
-                if ($file->getSize() >= 20971520 || $image->width >= 30000 || $image->height >= 30000) {
-                    return false;
-                }
-
-                AlibabaCloud::accessKeyClient(
-                    $configs->get(AliyunOption::AccessKeyId),
-                    $configs->get(AliyunOption::AccessKeySecret),
-                )->regionId($configs->get(AliyunOption::RegionId))->asDefaultClient();
-                $task = ['dataId' => $image->id, 'url' => $image->url];
-                $response = Green::v20180509()->imageSyncScan()->body(json_encode([
-                    'tasks' => [$task],
-                    'scenes' => $configs->get(AliyunOption::Scenes),
-                    'bizType' => $configs->get(AliyunOption::BizType)
-                ]))->request();
-                if (200 != $response->get('code')) {
-                    throw new \Exception("detect not success. code:" . $response->get('code'));
-                }
-                if ($result = $response->data[0] ?? null) {
-                    if (200 == $result->code) {
-                        foreach ($result->results as $item) {
-                            if ($item->suggestion === 'block') {
-                                $flag = true;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if ($driver === 'nsfwjs') {
-                // 不支持 bmp 格式
-                if ($image->extension === 'bmp') {
-                    return false;
-                }
-                $response = Http::timeout(180)->withOptions(['timeout' => 180])->attach(
-                    $configs->get(NsfwJsOption::AttrName, 'image'), $file->getContent(), $file->getClientOriginalName(),
-                )->post($configs->get(NsfwJsOption::ApiUrl));
-                $ratio = $configs->get(NsfwJsOption::Threshold, 60) / 100;
-
-                if ($response->json('hentai', 0.00) >= $ratio) {
-                    $flag = true;
-                }
-
-                if ($response->json('porn', 0.00) >= $ratio) {
-                    $flag = true;
-                }
-
-                if ($response->json('sexy', 0.00) >= $ratio) {
-                    $flag = true;
-                }
-            }
-        } catch (\Throwable $e) {
-            throw new UploadException('Scan: '.$e->getMessage());
+            return match ($driver) {
+                'tencent' => $this->scanTencent($configs, $path),
+                'aliyun' => $this->scanAliyun($configs, $image, $path),
+                'nsfwjs' => $this->scanNsfw($configs, $image, $path),
+                default => throw new UploadException('未配置内容审核提供方'),
+            };
+        } catch (UploadException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            Utils::e($exception, '内容审核失败');
+            throw new UploadException('暂时无法完成内容审核，请稍后重试', previous: $exception);
         }
-
-        return $flag;
     }
 
-    /**
-     * 合成水印
-     *
-     * @param  mixed  $image
-     * @param  Collection  $configs
-     * @return \Intervention\Image\Image
-     */
-    public function stickWatermark(mixed $image, Collection $configs): \Intervention\Image\Image
+    private function scanTencent(Collection $configs, string $path): bool
     {
-        $driver = $configs->get('driver');
-        $options = collect($configs->get("drivers")[$driver]);
-        $image = InterventionImage::make($image);
-
-        $position = $options->get(FontOption::Position, 'bottom-right');
-        $offsetX = (int) $options->get(FontOption::X, 10);
-        $offsetY = (int) $options->get(FontOption::Y, 10);
-
-        $watermark = $this->getWatermark($driver, $options);
-
-        // 原图宽高
-        $imageWidth = $image->width();
-        $imageHeight = $image->height();
-
-        // 水印画布宽高
-        $watermarkWidth = $watermark->width();
-        $watermarkHeight = $watermark->height();
-
-        if ($position === 'tiled') {
-            // 平铺水印
-            for ($x = 0; $x < $imageWidth; $x++) {
-                for ($y = 0; $y < $imageHeight; $y++) {
-                    $image->insert($watermark, '', $x, $y);
-                    $y += $watermarkHeight + $offsetY;
-                }
-                $x += $watermarkWidth + $offsetX;
-            }
-        } else {
-            $image->insert($watermark, $position, $offsetX, $offsetY);
+        if (filesize($path) > 5 * 1024 * 1024) {
+            throw new UploadException('图片大小超过当前审核提供方的限制');
         }
 
-        return $image;
+        $credential = new Credential($configs->get(TencentOption::SecretId), $configs->get(TencentOption::SecretKey));
+        $http = new HttpProfile();
+        $http->setEndpoint($configs->get(TencentOption::Endpoint));
+        $http->setReqTimeout(10);
+        $profile = new ClientProfile();
+        $profile->setHttpProfile($http);
+        $client = new ImsClient($credential, $configs->get(TencentOption::Region), $profile);
+        $request = new ImageModerationRequest();
+        $request->fromJsonString(json_encode(array_filter([
+            'FileContent' => base64_encode(file_get_contents($path)),
+            'BizType' => $configs->get(TencentOption::BizType),
+        ]), JSON_THROW_ON_ERROR));
+
+        return match ($client->ImageModeration($request)->getSuggestion()) {
+            'Pass' => false,
+            'Block', 'Review' => true,
+            default => throw new \RuntimeException('Invalid Tencent moderation result'),
+        };
     }
 
-    /**
-     * 生成缩略图，缩略图目录必须在 public 目录下，且该目录必须存在
-     *
-     * @param mixed $image 图片数据
-     * @param mixed $data 物理图片数据
-     * @param int $max 最大宽高
-     * @param bool $force 是否强制覆盖
-     * @return void
-     */
-    public function makeThumbnail(Image $image, mixed $data, int $max = 400, bool $force = false): void
+    private function scanAliyun(Collection $configs, Image $image, string $path): bool
     {
-        $pathname = public_path($image->getThumbnailPathname());
+        if (filesize($path) > 20 * 1024 * 1024 || $image->width >= 30000 || $image->height >= 30000) {
+            throw new UploadException('图片尺寸超过当前审核提供方的限制');
+        }
 
-        if (! file_exists($pathname) || $force) {
-            try {
-                // 创建文件夹
-                if (! is_dir(dirname($pathname))) {
-                    @mkdir(dirname($pathname));
-                }
+        $directory = config('image.private_root').'/review';
+        File::ensureDirectoryExists($directory);
+        $stagedPath = $directory.'/'.$image->key;
+        $expiresAt = now()->addMinutes(2);
+        $url = URL::temporarySignedRoute('media.review', $expiresAt, ['token' => $image->key]);
 
-                // 生成缩略图，svg等格式本身体积足够小且网页原生支持(比生成的png缩略图还小)，不用生成缩略图，直接复制文件
-                if($image->extension ==='svg') {
-                    copy($data->getPathname(), $pathname);
-                }else{
-                    @ini_set('memory_limit', '512M');
+        try {
+            if (! copy($path, $stagedPath)) {
+                throw new \RuntimeException('Unable to stage moderation input');
+            }
+            Cache::put('media.review.'.$image->key, [$stagedPath, $image->mimetype], $expiresAt);
+            AlibabaCloud::accessKeyClient(
+                $configs->get(AliyunOption::AccessKeyId),
+                $configs->get(AliyunOption::AccessKeySecret),
+            )->regionId($configs->get(AliyunOption::RegionId))->asDefaultClient();
+            $response = Green::v20180509()->imageSyncScan()->timeout(10)->connectTimeout(3)->body(json_encode([
+                'tasks' => [['dataId' => $image->key, 'url' => $url]],
+                'scenes' => $configs->get(AliyunOption::Scenes, ['porn']),
+                'bizType' => $configs->get(AliyunOption::BizType),
+            ], JSON_THROW_ON_ERROR))->request();
 
-                    $img = InterventionImage::make($data);
+            $result = $response->data[0] ?? null;
+            if ($response->get('code') != 200 || ($result->code ?? null) != 200 || empty($result->results)) {
+                throw new \RuntimeException('Invalid Aliyun moderation result');
+            }
 
-                    $width = $w = $image->width;
-                    $height = $h = $image->height;
-
-                    if ($w > $max && $h > $max) {
-                        $scale = min($max / $w, $max / $h);
-                        $width  = (int)($w * $scale);
-                        $height = (int)($h * $scale);
-                    }
-
-                    $img->fit($width, $height, fn($constraint) => $constraint->upsize())->encode('png', 60)->save($pathname);
-                    $img->destroy();
-                }
-            } catch (\Throwable $e) {
-                Utils::e($e, '生成缩略图时出现异常');
+            return collect($result->results)->contains(fn ($decision) => ($decision->suggestion ?? null) !== 'pass');
+        } finally {
+            Cache::forget('media.review.'.$image->key);
+            if (is_file($stagedPath)) {
+                @unlink($stagedPath);
             }
         }
     }
 
-    /**
-     * 获取水印画布
-     *
-     * @param  string  $driver
-     * @param  Collection  $options
-     * @return \Intervention\Image\Image
-     */
-    private function getWatermark(string $driver, Collection $options): \Intervention\Image\Image
+    private function scanNsfw(Collection $configs, Image $image, string $path): bool
     {
-        $manager = new ImageManager(config('image'));
+        $stream = fopen($path, 'rb');
+        if (! $stream) {
+            throw new \RuntimeException('Unable to open moderation input');
+        }
 
-        if ($driver === 'image') {
-            $watermark = $manager->make(storage_path('app/public/'.trim($options->get(ImageOption::Image), '/')));
-            $opacity = (int) $options->get(ImageOption::Opacity, 0);
-            $rotate = (int) $options->get(ImageOption::Rotate, 0);
-            $width = $options->get(ImageOption::Width, 0);
-            $height = $options->get(ImageOption::Height, 0);
+        try {
+            $response = Http::connectTimeout(3)->timeout(10)->withoutRedirecting()
+                ->attach($configs->get(NsfwJsOption::AttrName, 'image'), $stream, $image->origin_name)
+                ->post($configs->get(NsfwJsOption::ApiUrl))->throw()->json();
+            $threshold = max(1, min(100, (int) $configs->get(NsfwJsOption::Threshold, 60))) / 100;
 
-            if ($opacity && $opacity != 100) {
-                $watermark->opacity((int) min($opacity, 100));
+            foreach (['hentai', 'porn', 'sexy'] as $category) {
+                if (! is_numeric($response[$category] ?? null) || $response[$category] < 0 || $response[$category] > 1) {
+                    throw new \RuntimeException('Invalid NSFW moderation result');
+                }
             }
 
-            if ($rotate) {
-                $watermark->rotate($rotate);
+            return max($response['hentai'], $response['porn'], $response['sexy']) >= $threshold;
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
             }
-
-            if ($width + $height > 0) {
-                $watermark->resize($width ?: null, $height ?: null, function ($constraint) {
-                    $constraint->aspectRatio();
-                    $constraint->upsize();
-                });
-            }
-            return $watermark;
-        } else {
-            $text = $options->get(FontOption::Text, Utils::config(ConfigKey::AppName));
-            $font = new Font(urldecode($text));
-            $font->valign('top')
-                ->file(storage_path('app/public/'.trim($options->get(FontOption::Font), '/')))
-                ->size((int) $options->get(FontOption::Size, 50))
-                ->angle((int) $options->get(FontOption::Angle, 0))
-                ->color($options->get(FontOption::Color, '000000')); // 十六进制 or rgba
-            $box = $font->getBoxSize();
-            $canvas = $manager->canvas($box['width'], $box['height']);
-            $font->applyToImage($canvas);
-            return $manager->make($canvas);
         }
     }
 
-    protected function replacePathname(string $pathname, UploadedFile $file): string
+    private function objectName(Collection $configs, UploadedFile $file, string $key, string $extension, ?int $userId): string
     {
-        $array = [
+        $tokens = [
             '{Y}' => date('Y'),
             '{y}' => date('y'),
             '{m}' => date('m'),
             '{d}' => date('d'),
             '{timestamp}' => time(),
-            '{uniqid}' => uniqid(),
-            '{md5}' => md5(microtime().Str::random()),
-            '{md5-16}' => substr(md5(microtime().Str::random()), 0, 16),
-            '{str-random-16}' => Str::random(),
-            '{str-random-10}' => Str::random(10),
-            '{filename}' => Str::replaceLast('.'.$file->getClientOriginalExtension(), '', $file->getClientOriginalName()),
-            '{uid}' => Auth::check() ? Auth::id() : 0,
+            '{uniqid}' => substr($key, 0, 13),
+            '{md5}' => $key,
+            '{md5-16}' => substr($key, 0, 16),
+            '{str-random-16}' => substr($key, 0, 16),
+            '{str-random-10}' => substr($key, 0, 10),
+            '{filename}' => $this->safeSegment(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)),
+            '{uid}' => $userId ?? 0,
         ];
-        return str_replace(array_keys($array), array_values($array), $pathname);
+        $rule = strtr((string) $configs->get(GroupConfigKey::PathNamingRule), $tokens);
+        $path = array_values(array_filter(array_map($this->safeSegment(...), explode('/', $rule))));
+        $stem = $this->safeSegment(strtr((string) $configs->get(GroupConfigKey::FileNamingRule), $tokens));
+
+        if ($stem === '' || $stem === substr($key, 0, 13) || str_starts_with($key, $stem)) {
+            return implode('/', [...array_slice($path, 0, 6), $key.'.'.$extension]);
+        }
+
+        return implode('/', [...array_slice($path, 0, 6), $stem.'-'.$key.'.'.$extension]);
+    }
+
+    private function safeSegment(string $value): string
+    {
+        $segment = preg_replace('/[^\p{L}\p{M}\p{N}_.-]+/u', '-', $value) ?? '';
+
+        return trim(mb_strcut($segment, 0, 80), '._-');
     }
 }

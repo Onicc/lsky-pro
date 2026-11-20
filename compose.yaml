@@ -1,0 +1,52 @@
+x-runtime: &runtime
+  image: ${LSKY_IMAGE:-lsky-pro:local}
+  environment:
+    APP_ENV: production
+    APP_KEY: ${APP_KEY:?Set APP_KEY for this installation}
+    APP_URL: ${APP_URL:?Set APP_URL to the canonical origin}
+    APP_DEBUG: 'false'
+    APP_PREVIOUS_KEYS: ${APP_PREVIOUS_KEYS:-}
+    DB_CONNECTION: ${DB_CONNECTION:-sqlite}
+    DB_DATABASE: ${DB_DATABASE:-/var/www/html/storage/app/lsky.sqlite}
+    DB_HOST: ${DB_HOST:-}
+    DB_PORT: ${DB_PORT:-}
+    DB_USERNAME: ${DB_USERNAME:-}
+    DB_PASSWORD: ${DB_PASSWORD:-}
+    CACHE_DRIVER: ${CACHE_DRIVER:-file}
+    SESSION_DRIVER: ${SESSION_DRIVER:-file}
+    SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
+    TRUSTED_HOSTS: ${TRUSTED_HOSTS:-}
+    TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+    LOG_CHANNEL: stderr
+    LOG_LEVEL: ${LOG_LEVEL:-info}
+  volumes:
+    - storage:/var/www/html/storage
+  tmpfs:
+    - /tmp:uid=33,gid=33,mode=1777,size=768m
+    - /var/www/html/bootstrap/cache:uid=33,gid=33,mode=0750,size=16m
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  restart: unless-stopped
+  stop_grace_period: 30s
+
+services:
+  app:
+    <<: *runtime
+    ports:
+      - "${LSKY_LISTEN_ADDRESS:-127.0.0.1}:${LSKY_PORT:-8080}:8080"
+
+  scheduler:
+    <<: *runtime
+    command: ['php', '-d', 'extension=pcntl', 'artisan', 'schedule:work', '--no-interaction']
+    stop_signal: SIGTERM
+    healthcheck:
+      disable: true
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  storage:

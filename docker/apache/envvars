@@ -1,0 +1,6 @@
+export APACHE_RUN_USER=www-data
+export APACHE_RUN_GROUP=www-data
+export APACHE_RUN_DIR=/tmp/apache2
+export APACHE_LOCK_DIR=/tmp/apache2/lock
+export APACHE_PID_FILE=/tmp/apache2/apache2.pid
+export APACHE_LOG_DIR=/var/log/apache2

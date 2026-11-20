@@ -71,7 +71,8 @@
                         </div>
 
                         <div class="col-span-6">
-                            <x-fieldset title="图片默认权限" faq="设置上传的图片默认的权限(公开还是私有，公开的图片将会出现在画廊中，你也可以通过图片管理单独设置权限)">
+                            <x-fieldset title="图片默认权限" faq="默认应用于新上传的图片，可按图片调整。">
+                                <x-fieldset-radio id="default_permission_link" name="configs[default_permission]" value="{{ \App\Enums\ImagePermission::LinkOnly }}" :checked="Auth::user()->configs->get('default_permission') == \App\Enums\ImagePermission::LinkOnly">持链接可访问</x-fieldset-radio>
                                 <x-fieldset-radio id="default_permission_private" name="configs[default_permission]" value="{{ \App\Enums\ImagePermission::Private }}" :checked="Auth::user()->configs->get('default_permission') == \App\Enums\ImagePermission::Private">私有</x-fieldset-radio>
                                 <x-fieldset-radio id="default_permission_public" name="configs[default_permission]" value="{{ \App\Enums\ImagePermission::Public }}" :checked="Auth::user()->configs->get('default_permission') == \App\Enums\ImagePermission::Public">公开</x-fieldset-radio>
                             </x-fieldset>

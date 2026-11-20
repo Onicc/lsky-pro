@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ConfigKey;
+use App\Enums\UserStatus;
 use App\Utils;
 use Illuminate\Support\Carbon;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -90,6 +91,8 @@ class User extends Authenticatable implements MustVerifyEmail
         'email_verified_at' => 'datetime',
     ];
 
+    protected $attributes = ['status' => UserStatus::Normal];
+
     protected $appends = ['avatar'];
 
     protected static function booted()
@@ -105,7 +108,7 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function avatar(): Attribute
     {
-        return new Attribute(fn () => Utils::getAvatar($this->email));
+        return new Attribute(fn () => Utils::getAvatar((string) $this->name));
     }
 
     public function useCapacity(): Attribute

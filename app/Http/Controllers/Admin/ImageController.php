@@ -17,7 +17,8 @@ class ImageController extends Controller
 {
     public function index(Request $request): View
     {
-        $keywords = $request->query('keywords');
+        $input = $request->query('keywords');
+        $keywords = is_string($input) ? Str::limit(trim($input), 500, '') : '';
         $images = Image::query()->with(['user' => function (BelongsTo $belongsTo) {
             $belongsTo->withSum('images', 'size');
         }, 'album', 'group', 'strategy'])->when($keywords, function (Builder $builder, $keywords) {
@@ -34,6 +35,7 @@ class ImageController extends Controller
             })->each(function ($filter) use ($builder) {
                 match ($filter) {
                     'is:public' => $builder->where('permission', ImagePermission::Public),
+                    'is:link' => $builder->where('permission', ImagePermission::LinkOnly),
                     'is:private' => $builder->where('permission', ImagePermission::Private),
                     'is:unhealthy' => $builder->where('is_unhealthy', 1),
                     'is:guest' => $builder->whereNull('user_id'),
@@ -44,7 +46,7 @@ class ImageController extends Controller
                     default => 0,
                 };
 
-                [$qualifier, $value] = explode(':', $filter);
+                [$qualifier, $value] = explode(':', $filter, 2);
 
                 if ($value) {
                     $callback = fn (Builder $builder) => $builder->where('name', $value);
@@ -57,20 +59,20 @@ class ImageController extends Controller
                         'extension' => $builder->where('extension', $value),
                         'md5' => $builder->where('md5', $value),
                         'sha1' => $builder->where('sha1', $value),
-                        'ip' => $builder->where('ip', $value),
+                        'ip' => $builder->where('uploaded_ip', $value),
                         default => 0
                     };
                 }
             });
 
             foreach ($words as $word) {
-                $builder->where('name', 'like', "%{$word}%")
+                $builder->where(fn (Builder $match) => $match->where('name', 'like', "%{$word}%")
                     ->orWhere('origin_name', 'like', "%{$word}%")
-                    ->orWhere('alias_name', 'like', "%{$word}%");
+                    ->orWhere('alias_name', 'like', "%{$word}%"));
             }
-        })->latest()->paginate(40);
+        })->latest()->orderByDesc('id')->paginate(40);
         $images->getCollection()->each(function (Image $image) {
-            $image->append('url', 'pathname', 'thumb_url');
+            $image->append(['url', 'pathname', 'thumb_url']);
             $image->album?->setVisible(['name']);
             $image->group?->setVisible(['name']);
             $image->strategy?->setVisible(['name']);
@@ -81,16 +83,12 @@ class ImageController extends Controller
         return view('admin.image.index', compact('images'));
     }
 
-    public function update(): Response
+    public function delete(Request $request, UserService $images): Response
     {
-        return $this->success();
-    }
+        $deleted = $images->deleteImages([(int) $request->route('id')]);
 
-    public function delete(Request $request): Response
-    {
-        /** @var Image $image */
-        $image = Image::with('user', 'strategy', 'album')->find($request->route('id'));
-        (new UserService())->deleteImages([$image->id]);
-        return $this->success('删除成功');
+        return $deleted
+            ? $this->success('删除成功，储存对象待清理', ['deleted' => $deleted])
+            : $this->fail('未找到需要删除的图片')->setStatusCode(404);
     }
 }

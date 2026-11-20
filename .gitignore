@@ -18,3 +18,9 @@ yarn-error.log
 /.idea
 /.vscode
 /public/i
+
+/storage/app/installed.lock*
+/storage/app/*.sqlite*
+
+/public/build
+/.phpunit.cache

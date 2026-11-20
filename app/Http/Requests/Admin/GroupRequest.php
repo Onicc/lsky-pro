@@ -34,11 +34,12 @@ class GroupRequest extends FormRequest
             'configs.limit_per_day' => 'required|integer',
             'configs.limit_per_week' => 'required|integer',
             'configs.limit_per_month' => 'required|integer',
-            'configs.image_save_quality' => 'required|min:1|max:100',
-            'configs.image_save_format' => '',
+            'configs.image_save_quality' => 'required|integer|between:1,100',
+            'configs.image_save_format' => 'nullable|in:jpg,jpeg,png,gif,tif,tiff,bmp,ico,webp',
             'configs.path_naming_rule' => 'max:400',
             'configs.file_naming_rule' => 'max:400',
-            'configs.accepted_file_suffixes' => 'required|array|in:jpeg,jpg,png,gif,tif,bmp,ico,psd,webp,svg',
+            'configs.accepted_file_suffixes' => 'required|array',
+            'configs.accepted_file_suffixes.*' => 'in:jpeg,jpg,png,gif,tif,tiff,bmp,ico,psd,webp',
 
             'configs.is_enable_scan' => 'boolean',
             'configs.scanned_action' => [

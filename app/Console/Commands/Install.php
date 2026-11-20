@@ -2,112 +2,166 @@
 
 namespace App\Console\Commands;
 
-use App\Utils;
+use App\Enums\ConfigKey;
+use App\Enums\UserStatus;
+use App\Models\Config;
+use App\Models\User;
+use App\Support\Installation;
+use Database\Seeders\InstallSeeder;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Validator;
+use Throwable;
 
 class Install extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
-    protected $signature = 'lsky:install';
+    protected $signature = 'lsky:install {--adopt : Attach an existing Lsky Pro database and apply pending migrations}';
 
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
-    protected $description = 'Install Lsky Pro.';
+    protected $description = 'Initialize an empty database and create the first administrator';
 
-    /**
-     * Create a new command instance.
-     *
-     * @return void
-     */
-    public function __construct()
-    {
-        $this->signature = implode(' ', [
-            'lsky:install',
-            '{--connection=mysql : Database type}',
-            '{--host=127.0.0.1 : Database connection address}',
-            '{--port=3306 : Database connection port}',
-            '{--database= : Database name}',
-            '{--username=root : Database connection user name}',
-            '{--password=root : Database connection password}',
-        ]);
-        parent::__construct();
-    }
-
-    /**
-     * Execute the console command.
-     *
-     * @return int
-     */
     public function handle(): int
     {
-        // 判断是否已经安装
-        if (file_exists(base_path('installed.lock'))) {
-            $this->warn('Already installed. if you want to reinstall, please remove installed.lock file.');
-            return 0;
+        $marker = Installation::marker();
+        $lock = @fopen($marker.'.mutex', 'c');
+
+        if ($lock === false) {
+            $this->error('Could not open the installation lock. Check storage/app permissions.');
+
+            return self::FAILURE;
         }
-
-        $driver = $this->option('connection');
-        $connection = "database.connections.{$driver}";
-        $options = [
-            'connection' => $this->option('connection'),
-            'host' => $this->option('host'),
-            'port' => $this->option('port'),
-            'database' => $this->option('database'),
-            'username' => $this->option('username'),
-            'password' => $this->option('password'),
-        ];
-        $configs = array_intersect_key($options, config($connection));
-
-        // 覆盖默认配置
-        Config::set($connection, array_merge(config($connection), $configs));
-        // 设置默认数据库驱动
-        Config::set('database.default', $driver);
-
-        clearstatcache(true);
 
         try {
-            if ($options['connection'] === 'sqlite' && ! $options['database']) {
-                $options['database'] = database_path('database.sqlite');
-                file_put_contents($options['database'], '');
-                Config::set('database.connections.sqlite.database', $options['database']);
-            }
-            // 执行数据库迁移
-            Artisan::call('migrate:fresh', ['--force' => true], outputBuffer: $this->output);
-            // 填充数据
-            Artisan::call('db:seed', ['--force' => true, '--class' => 'InstallSeeder'], outputBuffer: $this->output);
-            // 更新 env 文件
-            $replaces = collect($options)->transform(fn ($item, $key) => ['DB_'.strtoupper($key) => $item])->collapse();
-            file_put_contents($this->laravel->environmentFilePath(), preg_replace(
-                $replaces->map(fn ($item, $key) => $this->replacementPattern($key, env($key, '')))->values()->toArray(),
-                $replaces->map(fn ($item, $key) => "{$key}={$item}")->values()->toArray(),
-                file_get_contents($this->laravel->environmentFilePath())
-            ));
-            // 创建锁文件
-            file_put_contents(base_path('installed.lock'), '');
-        } catch (\Throwable $e) {
-            $this->warn("Installation error!\n");
-            $this->error($e->getMessage());
-            Utils::e($e, '执行数据库安装程序时出现异常');
-            return 1;
-        }
+            if (! flock($lock, LOCK_EX | LOCK_NB)) {
+                $this->error('Another installation is in progress.');
 
-        $this->info('Install success!');
-        return 0;
+                return self::FAILURE;
+            }
+
+            if (! $this->option('adopt') && Installation::exists()) {
+                $this->info('Lsky Pro is already installed.');
+
+                return self::SUCCESS;
+            }
+
+            // Resolve the encrypter before changing the database so an invalid key cannot leave a partial installation.
+            app('encrypter');
+
+            if ($this->option('adopt')) {
+                if (! $this->hasExistingInstallation()) {
+                    $this->error('The configured database lacks a complete Lsky Pro installation with an administrator.');
+
+                    return self::FAILURE;
+                }
+                if (! $this->migrate()) {
+                    return self::FAILURE;
+                }
+            } elseif (! $this->initializeDatabase($marker.'.pending')) {
+                return self::FAILURE;
+            }
+
+            File::replace($marker, 'installed'.PHP_EOL);
+            if (is_file($marker.'.pending')) {
+                File::delete($marker.'.pending');
+            }
+            $this->info('Lsky Pro is ready.');
+
+            return self::SUCCESS;
+        } catch (Throwable $e) {
+            report($e);
+            $this->error('Installation failed. Check the application log and your database and storage settings.');
+
+            return self::FAILURE;
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
     }
 
-    protected function replacementPattern(string $name, string $value): string
+    private function initializeDatabase(string $pending): bool
     {
-        $escaped = preg_quote('='.$value, '/');
+        $email = config('lsky.install.admin_email');
+        $password = config('lsky.install.admin_password');
+        $validator = Validator::make(compact('email', 'password'), [
+            'email' => ['required', 'string', 'max:254', 'email'],
+            'password' => ['required', 'string', 'min:12'],
+        ]);
+        if ($validator->fails() || strlen($password) > 72) {
+            $this->error('Set LSKY_ADMIN_EMAIL and LSKY_ADMIN_PASSWORD (12–72 bytes).');
 
-        return "/^{$name}{$escaped}/m";
+            return false;
+        }
+
+        $connection = DB::connection();
+        $database = $connection->getDatabaseName();
+        $identity = hash('sha256', implode('|', [
+            $connection->getDriverName(), $connection->getConfig('host'), $connection->getConfig('port'), $database,
+        ]));
+
+        if ($connection->getDriverName() === 'sqlite') {
+            if ($database === ':memory:') {
+                $this->error('Installation requires a persistent SQLite database path.');
+
+                return false;
+            }
+            if (! is_file($database)) {
+                if (! is_dir(dirname($database)) || ! touch($database)) {
+                    $this->error('Could not create the configured SQLite database file.');
+
+                    return false;
+                }
+                @chmod($database, 0600);
+            }
+        }
+
+        if (is_file($pending)) {
+            if (trim(File::get($pending)) !== $identity) {
+                $this->error('The previous installation was started with a different database.');
+
+                return false;
+            }
+        } elseif (Schema::getTables() !== []) {
+            $this->error('Installation requires an empty database. Use --adopt to attach an existing Lsky Pro installation.');
+
+            return false;
+        } else {
+            File::replace($pending, $identity.PHP_EOL);
+        }
+
+        if (! $this->migrate()) {
+            return false;
+        }
+
+        if (! $this->hasExistingInstallation()) {
+            DB::transaction(function () use ($email, $password) {
+                $this->laravel->make(InstallSeeder::class)->run();
+
+                $admin = new User([
+                    'name' => '管理员',
+                    'email' => $email,
+                    'password' => Hash::make($password),
+                    'status' => UserStatus::Normal,
+                ]);
+                $admin->is_adminer = true;
+                $admin->email_verified_at = now();
+                $admin->saveOrFail();
+            });
+        }
+
+        return true;
+    }
+
+    private function migrate(): bool
+    {
+        return $this->call('migrate', ['--force' => true]) === self::SUCCESS;
+    }
+
+    private function hasExistingInstallation(): bool
+    {
+        return Schema::hasTable('migrations') && Schema::hasTable('configs') && Schema::hasTable('users')
+            && Config::query()->where('name', ConfigKey::AppVersion)->exists()
+            && User::query()->where('is_adminer', true)->exists();
     }
 }
