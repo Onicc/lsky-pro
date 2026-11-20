@@ -45,7 +45,8 @@ COPY docker/image-magick/policy.xml /etc/lsky/image-magick/policy.xml
 
 FROM php-runtime AS php-source
 COPY --from=composer-bin /usr/bin/composer /usr/local/bin/composer
-ENV COMPOSER_ALLOW_SUPERUSER=1
+ENV COMPOSER_ALLOW_SUPERUSER=1 \
+    COMPOSER_CACHE_DIR=/root/.cache/composer
 COPY . .
 
 FROM php-source AS development

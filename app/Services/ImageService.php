@@ -158,18 +158,16 @@ class ImageService
         $temporaryPath = null;
 
         try {
-            [$extension, $encoded] = $this->processor->prepare($sourcePath, $extension, $configs);
-            if ($encoded) {
-                if ($encoded->size() > config('image.max_upload_bytes')) {
-                    throw new UploadException('处理后的图片大小超出限制');
-                }
-                $temporaryPath = tempnam(sys_get_temp_dir(), 'lsky-image-');
-                if ($temporaryPath === false) {
-                    throw new UploadException('暂时无法创建图片处理文件');
-                }
-                $encoded->save($temporaryPath);
-            }
+            [$extension, $temporaryPath] = $this->processor->prepare($sourcePath, $extension, $configs);
             $path = $temporaryPath ?: $sourcePath;
+            clearstatcache(true, $path);
+            $size = filesize($path);
+            if ($size === false || $size < 1) {
+                throw new UploadException('无法读取处理后的图片，请稍后重试');
+            }
+            if ($size > config('image.max_upload_bytes')) {
+                throw new UploadException('处理后的图片大小超出限制');
+            }
 
             [$width, $height, $mimetype] = $this->processor->inspect($path, $extension);
             $name = $this->objectName($configs, $file, $image->key, $extension, $user?->id);
@@ -182,7 +180,7 @@ class ImageService
                 'path' => $directory === '.' ? '' : $directory,
                 'name' => basename($name),
                 'origin_name' => mb_substr(mb_convert_encoding($file->getClientOriginalName(), 'UTF-8', 'UTF-8'), 0, 255),
-                'size' => ceil(filesize($path) * 100 / 1024) / 100,
+                'size' => ceil($size * 100 / 1024) / 100,
                 'mimetype' => $mimetype,
                 'extension' => $extension,
                 'width' => $width,

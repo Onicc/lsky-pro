@@ -145,14 +145,16 @@ token=$(curl --fail-with-body --silent --show-error --max-time 15 \
 
 make_png() {
     "${compose[@]}" exec -T app php -r '
-        $image = imagecreatetruecolor(40, 40);
-        imagefill($image, 0, 0, (int) $argv[1]);
+        $width = (int) $argv[2];
+        $height = (int) $argv[3];
+        $image = imagecreatetruecolor($width, $height);
+        imagefilledrectangle($image, 0, 0, $width - 1, $height - 1, (int) $argv[1]);
         imagepng($image);
-    ' "$1"
+    ' "$1" "${2:-40}" "${3:-40}"
 }
 
 upload_png() {
-    curl --fail-with-body --silent --show-error --max-time 20 \
+    curl --fail-with-body --silent --show-error --max-time "${3:-20}" \
         --header 'Accept: application/json' --header "Authorization: Bearer $token" \
         --header "Idempotency-Key: $(openssl rand -hex 16)" \
         --form "permission=${2:-2}" \
@@ -170,10 +172,14 @@ check_png() {
     curl --fail --silent --show-error --max-time 10 "$url" -o "$work/download.png"
     "${compose[@]}" exec -T app php -r '
         $image = imagecreatefromstring(stream_get_contents(STDIN));
-        if ($image === false || imagecolorat($image, 0, 0) !== (int) $argv[1]) {
+        $width = (int) $argv[2];
+        $height = (int) $argv[3];
+        if ($image === false || imagesx($image) !== $width || imagesy($image) !== $height
+            || imagecolorat($image, 0, 0) !== (int) $argv[1]
+            || imagecolorat($image, $width - 1, $height - 1) !== (int) $argv[1]) {
             exit(1);
         }
-    ' "$expected" < "$work/download.png"
+    ' "$expected" "${3:-40}" "${4:-40}" < "$work/download.png"
 }
 
 make_png 255 > "$work/first.png"
@@ -201,6 +207,14 @@ for _ in {1..4}; do
     check_png "$second_url" 16711680
     check_png "$third_url" 65280
 done
+
+if [[ "$DB_CONNECTION" == sqlite ]]; then
+    make_png 65280 7680 4320 > "$work/8k.png"
+    large_url=$(upload_png "$work/8k.png" 2 60 | upload_url)
+    check_png "$large_url" 65280 7680 4320
+    printf '8K PNG upload and readback passed.\n'
+fi
+
 private_url=$(upload_png "$work/first.png" 0 | upload_url)
 private_status=$(curl --silent --max-time 10 --output /dev/null --write-out '%{http_code}' "$private_url")
 [[ "$private_status" == 404 ]]

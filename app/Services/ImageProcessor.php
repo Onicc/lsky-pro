@@ -7,11 +7,14 @@ use App\Enums\Watermark\FontOption;
 use App\Enums\Watermark\ImageOption;
 use App\Enums\Watermark\Mode;
 use App\Exceptions\UploadException;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Intervention\Image\Alignment;
 use Intervention\Image\Color;
 use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
+use Intervention\Image\Exceptions\ImageException;
 use Intervention\Image\Exceptions\RuntimeException;
 use Intervention\Image\Format;
 use Intervention\Image\ImageManager;
@@ -23,6 +26,8 @@ use Intervention\Image\Typography\FontFactory;
 class ImageProcessor
 {
     public const SUPPORTED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'tif', 'tiff', 'bmp', 'ico', 'psd', 'webp'];
+
+    private const LARGE_IMAGE_PIXELS = 16_000_000;
 
     private const IMAGE_TYPES = [
         'jpg' => [IMAGETYPE_JPEG],
@@ -52,41 +57,181 @@ class ImageProcessor
             throw new UploadException('图片像素数量超出限制');
         }
 
-        return [$width, $height, $info['mime']];
+        return [$width, $height, $info['mime'], $info['bits'] ?? 0];
     }
 
     public function prepare(string $path, string $extension, Collection $configs): array
     {
-        $this->inspect($path, $extension);
+        [$width, $height, , $bits] = $this->inspect($path, $extension);
 
+        return $this->withPixelBudget($width, $height, fn () =>
+            $this->prepareFile($path, $extension, $configs, $width, $height, $bits));
+    }
+
+    public function withPixelBudget(int $width, int $height, \Closure $process): mixed
+    {
+        if ($width * $height < self::LARGE_IMAGE_PIXELS) {
+            return $process();
+        }
+
+        try {
+            return Cache::lock('media.processing.large', 120)->block(15, $process);
+        } catch (LockTimeoutException $exception) {
+            throw new UploadException('服务器正在处理其他大图，请稍后重试', previous: $exception);
+        }
+    }
+
+    private function prepareFile(
+        string $path,
+        string $extension,
+        Collection $configs,
+        int $width,
+        int $height,
+        int $bits,
+    ): array {
+        $watermark = $this->watermarkConfig($configs, Mode::Overlay);
+        $quality = max(1, min(100, (int) $configs->get(GroupConfigKey::ImageSaveQuality, 75)));
+        $requestedFormat = strtolower((string) $configs->get(GroupConfigKey::ImageSaveFormat));
+        $target = $requestedFormat ?: $extension;
+        $strip = (bool) config('image.strip_metadata');
+
+        if (config('image.driver') === 'gd' && $extension === 'png') {
+            $this->checkGdPngMemory($width * $height);
+        }
         try {
             $image = $this->manager()->decodePath($path);
         } catch (RuntimeException $exception) {
-            throw new UploadException('图片无法解码或当前服务不支持该格式', previous: $exception);
+            throw new UploadException('图片无法解码，文件可能已损坏或超出处理资源限制', previous: $exception);
         }
 
         $this->checkFrames($image);
-        $watermark = $this->watermarkConfig($configs, Mode::Overlay);
-        $quality = max(1, min(100, (int) $configs->get(GroupConfigKey::ImageSaveQuality, 75)));
-        $target = strtolower((string) $configs->get(GroupConfigKey::ImageSaveFormat));
-        $preserveFormat = in_array($extension, ['gif', 'ico', 'psd'], true);
-        $strip = (bool) config('image.strip_metadata');
-
-        if ($preserveFormat || (! $watermark && $quality === 100 && $target === '' && ! $strip)) {
+        if (in_array($extension, ['gif', 'ico', 'psd'], true)
+            || (! $watermark && $quality === 100 && $requestedFormat === '' && ! $strip)) {
             return [$extension, null];
         }
 
-        $target = $target ?: $extension;
+        // The Imagick PNG coder can require three large pixel caches while encoding.
+        $streamPng = $width * $height >= self::LARGE_IMAGE_PIXELS && $bits > 0 && $bits <= 8
+            && $extension === 'png' && $target === 'png' && $strip && ! $watermark
+            && $image->count() === 1 && $this->isSimplePng($path);
 
         if (! in_array($target, self::SUPPORTED_EXTENSIONS, true) || ! ($format = Format::tryCreate($target))) {
             throw new UploadException('配置的图片转换格式不受支持');
         }
 
-        if ($watermark) {
-            $this->watermark($image, $watermark);
+        $outputPath = tempnam(sys_get_temp_dir(), 'lsky-image-');
+        if ($outputPath === false) {
+            throw new UploadException('暂时无法创建图片处理文件');
         }
 
-        return [$target, $image->encodeUsingFormat($format, quality: $quality, strip: $strip)];
+        try {
+            if ($streamPng) {
+                unset($image);
+                $this->writeLargePng($path, $outputPath);
+            } else {
+                if ($watermark) {
+                    $this->watermark($image, $watermark);
+                }
+                $image->encodeUsingFormat($format, quality: $quality, strip: $strip)->save($outputPath);
+            }
+        } catch (\Throwable $exception) {
+            @unlink($outputPath);
+
+            if ($exception instanceof UploadException) {
+                throw $exception;
+            }
+            if ($exception instanceof ImageException || $exception instanceof \ImagickException) {
+                report($exception);
+                throw new UploadException('图片转换失败或资源不足，请降低像素、帧数或尝试 JPEG、WebP', previous: $exception);
+            }
+
+            throw $exception;
+        }
+
+        return [$target, $outputPath];
+    }
+
+    private function isSimplePng(string $path): bool
+    {
+        $stream = fopen($path, 'rb');
+        if ($stream === false) {
+            return false;
+        }
+
+        try {
+            fseek($stream, 8); // The PNG signature has already been checked by inspect().
+            while (strlen($header = fread($stream, 8) ?: '') === 8) {
+                $chunk = unpack('Nlength/a4type', $header);
+                if ($chunk['type'] === 'IDAT') {
+                    return true;
+                }
+                if (in_array($chunk['type'], ['acTL', 'eXIf', 'IEND'], true)
+                    || fseek($stream, $chunk['length'] + 4, SEEK_CUR) !== 0) {
+                    return false;
+                }
+            }
+
+            return false;
+        } finally {
+            fclose($stream);
+        }
+    }
+
+    private function checkGdPngMemory(int $pixels): void
+    {
+        $memoryLimit = ini_parse_quantity((string) ini_get('memory_limit'));
+        $available = $memoryLimit - memory_get_usage(true) - 32 * 1024 * 1024;
+        // GD can hold both libpng's RGBA data and GD's pixel buffer while decoding.
+        if ($memoryLimit > 0 && $pixels * 9 > $available) {
+            throw new UploadException('PNG 超出当前处理内存，请降低像素或尝试 JPEG、WebP');
+        }
+    }
+
+    private function writeLargePng(string $source, string $target): void
+    {
+        // Copy the validated compressed pixels and rendering chunks exactly, including alpha.
+        $input = fopen($source, 'rb');
+        if (! $input) {
+            throw new UploadException('无法读取待处理的 PNG');
+        }
+        try {
+            $output = fopen($target, 'wb');
+            if (! $output) {
+                throw new UploadException('PNG 无法写入，请检查服务器的临时储存');
+            }
+            try {
+                $this->copyPngPixels($input, $output);
+            } finally {
+                fclose($output);
+            }
+        } finally {
+            fclose($input);
+        }
+    }
+
+    private function copyPngPixels(mixed $input, mixed $output): void
+    {
+        $signature = fread($input, 8);
+        $renderingChunks = ['IHDR', 'PLTE', 'IDAT', 'IEND', 'tRNS', 'cHRM', 'gAMA', 'sRGB', 'sBIT', 'cICP', 'mDCV', 'cLLI'];
+        if (! $signature || fwrite($output, $signature) !== 8) {
+            throw new UploadException('PNG 文件不完整或临时储存不可写');
+        }
+        while (strlen($header = fread($input, 8) ?: '') === 8) {
+            $chunk = unpack('Nlength/a4type', $header);
+            $length = $chunk['length'] + 4; // Include the chunk CRC.
+            if (in_array($chunk['type'], $renderingChunks, true)) {
+                if (fwrite($output, $header) !== 8 || stream_copy_to_stream($input, $output, $length) !== $length) {
+                    throw new UploadException('PNG 文件不完整或临时储存不可写');
+                }
+                if ($chunk['type'] === 'IEND') {
+                    return;
+                }
+            } elseif (fseek($input, $length, SEEK_CUR) !== 0) {
+                break;
+            }
+        }
+
+        throw new UploadException('PNG 文件不完整');
     }
 
     public function thumbnail(mixed $stream, Collection $configs, int $maximum = 400): EncodedImageInterface

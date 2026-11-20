@@ -6,6 +6,7 @@ use App\Enums\ImagePermission;
 use App\Enums\StrategyKey;
 use App\Enums\UserStatus;
 use App\Enums\Watermark\Mode;
+use App\Exceptions\UploadException;
 use App\Models\Image;
 use App\Models\Strategy;
 use App\Services\ImageProcessor;
@@ -58,6 +59,8 @@ class MediaController extends Controller
 
         try {
             return response()->file($thumbnails->make($image), $this->headers('image/webp'));
+        } catch (UploadException $exception) {
+            abort(503, $exception->getMessage(), ['Retry-After' => '10']);
         } catch (\Throwable $exception) {
             report($exception);
             abort(404);
@@ -92,7 +95,11 @@ class MediaController extends Controller
 
         if ($dynamic || $rasterize) {
             try {
-                $encoded = $processor->render($stream, $image->extension, $options);
+                $encoded = $processor->withPixelBudget($image->width, $image->height,
+                    fn () => $processor->render($stream, $image->extension, $options),
+                );
+            } catch (UploadException $exception) {
+                abort(503, $exception->getMessage(), ['Retry-After' => '10']);
             } catch (\Throwable $exception) {
                 report($exception);
                 abort(404);
