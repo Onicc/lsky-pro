@@ -66,6 +66,7 @@ class Image extends Model
         'width',
         'height',
         'permission',
+        'expires_at',
         'is_unhealthy',
         'uploaded_ip',
     ];
@@ -92,6 +93,7 @@ class Image extends Model
         'size' => 'float',
         'is_unhealthy' => 'bool',
         'permission' => 'integer',
+        'expires_at' => 'datetime',
         'object_managed' => 'boolean',
         'thumbnail_pending_at' => 'datetime',
         'thumbnail_attempts' => 'integer',

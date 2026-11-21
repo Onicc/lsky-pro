@@ -20,14 +20,18 @@ class MediaController extends Controller
     public function original(Request $request, string $key, string $extension, ImageProcessor $processor): Response
     {
         $image = Image::query()->with('group', 'strategy')
-            ->where('key', $key)->where('extension', strtolower($extension))->firstOrFail();
+            ->where('key', $key)->where('extension', strtolower($extension))
+            ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->firstOrFail();
 
         return $this->deliver($request, $image, $processor);
     }
 
     public function thumbnail(Request $request, string $key, MediaThumbnails $thumbnails): Response
     {
-        $image = Image::query()->with('group', 'strategy')->where('key', $key)->firstOrFail();
+        $image = Image::query()->with('group', 'strategy')->where('key', $key)
+            ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->firstOrFail();
         abort_unless($this->canView($request, $image) && $image->extension !== 'svg', 404);
 
         try {

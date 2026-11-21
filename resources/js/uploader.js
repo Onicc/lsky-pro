@@ -163,10 +163,12 @@ export function mountUploader(root) {
         const xhr = new XMLHttpRequest();
         const payload = new FormData();
         if (!item.destination) {
+            const retention = root.querySelector('[data-upload-retention]:checked')?.value || '';
             item.destination = Object.fromEntries([
                 ['strategy_id', find('strategy')?.value],
                 ['album_id', find('album')?.value],
                 ['permission', find('permission')?.value],
+                ['retention_days', retention],
             ].filter(([, value]) => value !== undefined));
         }
         for (const [field, value] of Object.entries(item.destination)) payload.append(field, value);

@@ -33,7 +33,7 @@
         </div>
     @else
         <div class="upload-workspace">
-            <div class="panel p-3 sm:p-4">
+            <div class="panel upload-surface p-3 sm:p-4">
                 <div data-upload-drop class="upload-dropzone" tabindex="0" role="button" aria-label="选择或拖拽图片上传">
                     <input id="picker" type="file" name="file" class="sr-only" data-upload-picker multiple accept="{{ implode(',', array_map(fn ($ext) => '.'.$ext, $extensions)) }}">
                     <div class="upload-dropzone-icon"><i class="fas fa-cloud-upload-alt" aria-hidden="true"></i></div>
@@ -49,36 +49,49 @@
                         <span>最多 {{ $group->configs->get(\App\Enums\GroupConfigKey::ConcurrentUploadNum, 3) }} 个并发</span>
                     </div>
                 </div>
-            </div>
-
-            <aside class="panel upload-options" aria-label="上传选项">
-                <div class="upload-options-title"><span>上传选项</span><i class="fas fa-sliders-h text-blue-500" aria-hidden="true"></i></div>
-                <label>储存策略
-                    <select data-upload-strategy>
-                        @foreach($strategies as $strategy)
-                            <option value="{{ $strategy->id }}" @selected($defaultStrategy === $strategy->id)>{{ $strategy->name }}</option>
-                        @endforeach
-                    </select>
-                </label>
-                @auth
-                    <label>相册
-                        <select data-upload-album>
-                            <option value="0">不归入相册</option>
-                            @foreach($albums as $album)
-                                <option value="{{ $album->id }}" @selected($defaultAlbum === $album->id)>{{ $album->name }}</option>
+                <div class="upload-options-inline" aria-label="上传选项">
+                    <div class="upload-option-group">
+                        <span class="upload-option-label">储存策略</span>
+                        <select data-upload-strategy>
+                            @foreach($strategies as $strategy)
+                                <option value="{{ $strategy->id }}" @selected($defaultStrategy === $strategy->id)>{{ $strategy->name }}</option>
                             @endforeach
                         </select>
-                    </label>
-                    <label>可见性
-                        <select data-upload-permission aria-describedby="upload-visibility-help">
-                            <option value="{{ \App\Enums\ImagePermission::LinkOnly }}" @selected($defaultPermission === \App\Enums\ImagePermission::LinkOnly)>持链接可访问</option>
-                            <option value="{{ \App\Enums\ImagePermission::Private }}" @selected($defaultPermission === \App\Enums\ImagePermission::Private)>仅自己可查看</option>
-                            <option value="{{ \App\Enums\ImagePermission::Public }}" @selected($defaultPermission === \App\Enums\ImagePermission::Public)>公开到画廊</option>
-                        </select>
-                    </label>
-                    <p id="upload-visibility-help" class="mt-3 text-xs leading-5 text-slate-500">私有图片只对你和管理员可见。公开图片可能出现在画廊。</p>
-                @endauth
-            </aside>
+                    </div>
+                    @auth
+                        <div class="upload-option-group">
+                            <span class="upload-option-label">相册</span>
+                            <select data-upload-album>
+                                <option value="0">不归入相册</option>
+                                @foreach($albums as $album)
+                                    <option value="{{ $album->id }}" @selected($defaultAlbum === $album->id)>{{ $album->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    @endauth
+                    <fieldset class="upload-option-group upload-choice-group">
+                        <legend class="upload-option-label">保留时间</legend>
+                        <div class="upload-choice-list">
+                            <label><input type="radio" name="retention_days" data-upload-retention value="7" @checked(!auth()->check())><span>7 天</span></label>
+                            <label><input type="radio" name="retention_days" data-upload-retention value="30"><span>30 天</span></label>
+                            <label><input type="radio" name="retention_days" data-upload-retention value="0" @checked(auth()->check())><span>永久</span></label>
+                        </div>
+                    </fieldset>
+                    <fieldset class="upload-option-group upload-choice-group">
+                        <legend class="upload-option-label">可见性</legend>
+                        <div class="upload-choice-list">
+                            @auth
+                                <label><input type="radio" name="permission" data-upload-permission value="{{ \App\Enums\ImagePermission::Public }}" @checked($defaultPermission === \App\Enums\ImagePermission::Public)><span>公开</span></label>
+                                <label><input type="radio" name="permission" data-upload-permission value="{{ \App\Enums\ImagePermission::LinkOnly }}" @checked($defaultPermission === \App\Enums\ImagePermission::LinkOnly)><span>不公开</span></label>
+                                <label><input type="radio" name="permission" data-upload-permission value="{{ \App\Enums\ImagePermission::Private }}" @checked($defaultPermission === \App\Enums\ImagePermission::Private)><span>仅自己</span></label>
+                            @else
+                                <label><input type="radio" name="permission" data-upload-permission value="{{ \App\Enums\ImagePermission::LinkOnly }}" checked><span>不公开</span></label>
+                            @endauth
+                        </div>
+                    </fieldset>
+                </div>
+                <p id="upload-visibility-help" class="upload-options-help">公开图片可能出现在画廊。不公开图片仅凭链接访问。</p>
+            </div>
         </div>
 
         <div data-upload-batch hidden class="upload-queue panel">

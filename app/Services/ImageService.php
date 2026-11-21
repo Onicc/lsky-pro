@@ -109,6 +109,7 @@ class ImageService
 
         $strategy = $this->selectStrategy($request, $group, $user);
         $permission = $this->selectPermission($request, $user);
+        $expiresAt = $this->selectExpiration($request);
         if ($permission === ImagePermission::Private && ! $strategy->supportsPrivateMedia()) {
             throw new UploadException('该储存策略未配置私有访问，请选择支持私有访问的储存');
         }
@@ -128,6 +129,7 @@ class ImageService
         $image->user_id = $user?->id;
         $image->album_id = $albumId ?: null;
         $image->permission = $permission;
+        $image->expires_at = $expiresAt;
         $image->object_managed = true;
         $image->thumbnail_pending_at = now();
         $image->setRelation('strategy', $strategy);
@@ -145,6 +147,7 @@ class ImageService
                 $strategy->id,
                 $image->album_id,
                 $permission,
+                $expiresAt?->toIso8601String(),
             ], JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR));
 
             if ($previous = $this->previousUpload($image)) {
@@ -240,6 +243,20 @@ class ImageService
         }
 
         return (int) $permission;
+    }
+
+    private function selectExpiration(Request $request): ?Carbon
+    {
+        $days = $request->input('retention_days');
+        if ($days === null || $days === '' || (string) $days === '0') {
+            return null;
+        }
+
+        if (! is_scalar($days) || ! in_array((int) $days, [7, 30], true)) {
+            throw new UploadException('图片保留时间无效');
+        }
+
+        return now()->addDays((int) $days);
     }
 
     private function previousUpload(Image $image): ?Image

@@ -7,6 +7,7 @@ use App\Models\MediaDeletion;
 use App\Models\MediaWrite;
 use App\Models\Strategy;
 use App\Services\ImageService;
+use App\Services\UserService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,7 @@ class PruneMedia extends Command
 
     public function handle(ImageService $media): int
     {
+        $this->pruneExpiredImages();
         $this->pruneExpiredReviews();
         $this->retireExpiredWrites();
         $ids = MediaDeletion::query()->where('available_at', '<=', now())
@@ -53,6 +55,16 @@ class PruneMedia extends Command
         }
 
         return $failed ? self::FAILURE : self::SUCCESS;
+    }
+
+    private function pruneExpiredImages(): void
+    {
+        $expired = Image::query()->whereNotNull('expires_at')->where('expires_at', '<=', now())
+            ->orderBy('id')->limit(max(1, (int) $this->option('limit')))->pluck('id')->all();
+
+        if ($expired) {
+            app(UserService::class)->deleteImages($expired, null, 'id');
+        }
     }
 
     private function retireExpiredWrites(): void
