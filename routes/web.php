@@ -52,9 +52,7 @@ Route::get('up', function () {
             DB::table('migrations')->pluck('migration')->all(),
         );
         $storageRoot = config('image.private_root');
-        $checks['storage'] = is_dir($storageRoot)
-            ? is_writable($storageRoot)
-            : is_writable(dirname($storageRoot));
+        $checks['storage'] = is_dir($storageRoot) && is_writable($storageRoot);
     } catch (Throwable) {
         // Keep the readiness endpoint opaque while retaining individual checks for operators.
     }

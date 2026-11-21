@@ -62,6 +62,13 @@ class Install extends Command
                 return self::FAILURE;
             }
 
+            $storageRoot = config('image.private_root');
+            if (! is_dir($storageRoot) && ! @mkdir($storageRoot, 0750, true) && ! is_dir($storageRoot)) {
+                $this->error('Could not create the private media directory. Check storage/app permissions.');
+
+                return self::FAILURE;
+            }
+
             File::replace($marker, 'installed'.PHP_EOL);
             if (is_file($marker.'.pending')) {
                 File::delete($marker.'.pending');
