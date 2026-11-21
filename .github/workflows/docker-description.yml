@@ -45,12 +45,16 @@ jobs:
               -H "Authorization: Bearer $bearer" \
               -H 'Content-Type: application/json' \
               --data-binary @"$RUNNER_TEMP/dockerhub-description.json")
+            printf 'Docker Hub update %s -> HTTP %s\\n' "$endpoint" "$status"
             if [[ "$status" == 200 || "$status" == 201 ]]; then
               updated=true
               break
             fi
           done
-          [[ "$updated" == true ]]
+          if [[ "$updated" != true ]]; then
+            jq -c '{message,detail,errinfo}' "$RUNNER_TEMP/dockerhub-response.json" || true
+            exit 1
+          fi
 
           result=$(curl --fail --silent --show-error --retry 3 \
             "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/lsky-pro/")
