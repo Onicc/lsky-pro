@@ -1,8 +1,8 @@
 <!-- Profile dropdown -->
-<x-dropdown>
+<x-dropdown trigger-id="account-menu-button">
     <x-slot name="trigger">
-        <button type="button" class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 shadow-sm hover:border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30" id="user-menu-button" aria-expanded="false" aria-haspopup="true">
-            <span class="sr-only">Open user menu</span>
+        <button type="button" class="site-account-trigger flex items-center gap-2" id="account-menu-button" aria-expanded="false" aria-haspopup="true">
+            <span class="sr-only">打开账户菜单</span>
             <img class="h-8 w-8 rounded-full" src="{{ Auth::user()->avatar }}" alt="">
             <span class="sm:block hidden font-semibold">{{ Auth::user()->name }}</span>
         </button>

@@ -1,12 +1,12 @@
 <!-- Strategies dropdown -->
-<x-dropdown>
+<x-dropdown trigger-id="strategy-menu-button">
     <x-slot name="trigger">
-        <button type="button" class="bg-gray-800 flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white" id="user-menu-button" aria-expanded="false" aria-haspopup="true">
-            <span class="sr-only">Open strategies menu</span>
-            <div class="h-8 w-8 rounded-full flex items-center justify-center bg-white">
-                <i class="fas fa-server text-gray-900"></i>
+        <button type="button" class="site-toolbar-trigger flex items-center gap-2" id="strategy-menu-button" aria-expanded="false" aria-haspopup="true">
+            <span class="sr-only">打开储存策略菜单</span>
+            <div class="toolbar-icon">
+                <i class="fas fa-server"></i>
             </div>
-            <span class="px-2 sm:block hidden" id="strategy-selected" data-id="0">获取中...</span>
+            <span class="sm:block hidden" id="strategy-selected" data-id="0">获取中...</span>
         </button>
     </x-slot>
 

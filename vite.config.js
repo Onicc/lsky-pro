@@ -16,6 +16,7 @@ const pageAssets = {
 };
 
 export default defineConfig({
+    base: '/build/',
     build: {
         outDir: 'public/build',
         emptyOutDir: true,

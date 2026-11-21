@@ -5,7 +5,7 @@
 @endpush
 
 <x-app-layout>
-    <div class="panel relative z-[3] mb-4 flex items-center justify-between gap-3 px-3 py-2.5">
+    <div class="image-toolbar panel relative z-[3] mb-4 flex items-center justify-between gap-3 px-3 py-2.5">
         <div class="space-x-2 flex justify-between items-center">
             <a class="text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:getAlbums()"><i class="fas fa-bars text-blue-500"></i> 相册</a>
             <div class="flex-row hidden lg:flex">
