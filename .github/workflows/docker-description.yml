@@ -2,8 +2,6 @@ name: Update Docker Hub description
 
 on:
   workflow_dispatch:
-  push:
-    tags: ['v*']
 
 permissions:
   contents: read
