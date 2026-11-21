@@ -1,0 +1,60 @@
+name: Update Docker Hub description
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Update repository description
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          : "${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}"
+          : "${DOCKERHUB_TOKEN:?DOCKERHUB_TOKEN is required}"
+
+          auth=$(jq -n --arg username "$DOCKERHUB_USERNAME" --arg password "$DOCKERHUB_TOKEN" \
+            '{username: $username, password: $password}' \
+            | curl --fail --silent --show-error --retry 3 \
+                -X POST 'https://hub.docker.com/v2/users/login/' \
+                -H 'Content-Type: application/json' --data-binary @-)
+          bearer=$(jq -er '.token' <<< "$auth")
+          description='安全优先的自托管图床与图片管理服务，支持 Docker、SQLite/MySQL/PostgreSQL、S3 和 MinIO。'
+          jq -n --arg description "$description" --rawfile full_description docs/dockerhub-overview.md \
+            '{description: $description, full_description: $full_description}' > "$RUNNER_TEMP/dockerhub-description.json"
+
+          updated=false
+          for endpoint in \
+            "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/lsky-pro/" \
+            "https://hub.docker.com/v2/namespaces/${DOCKERHUB_USERNAME}/repositories/lsky-pro/"; do
+            status=$(curl --silent --show-error --retry 3 --output "$RUNNER_TEMP/dockerhub-response.json" \
+              --write-out '%{http_code}' -X PATCH "$endpoint" \
+              -H "Authorization: JWT $bearer" \
+              -H 'Content-Type: application/json' \
+              --data-binary @"$RUNNER_TEMP/dockerhub-description.json")
+            if [[ "$status" == 200 || "$status" == 201 ]]; then
+              updated=true
+              break
+            fi
+          done
+          [[ "$updated" == true ]]
+
+          result=$(curl --fail --silent --show-error --retry 3 \
+            "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/lsky-pro/")
+          jq -e --arg description "$description" \
+            '.description == $description and (.full_description | type == "string" and length > 1000)' \
+            <<< "$result" >/dev/null
+          printf 'Docker Hub description updated and verified.\\n'
