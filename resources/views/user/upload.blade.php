@@ -1,7 +1,7 @@
 @section('title', '上传图片')
 
 <x-app-layout>
-    <div class="my-6 md:my-9">
+    <div class="py-2">
         <x-upload/>
     </div>
 </x-app-layout>

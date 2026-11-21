@@ -28,7 +28,7 @@
              x-show="$store.modal.isOpen('{{ $id }}')"
              class="flex text-base text-left transform transition w-full md:inline-block md:max-w-2xl md:px-4 md:my-8 md:align-middle lg:max-w-4xl"
         >
-            <div class="w-full relative flex bg-white px-4 pt-14 pb-8 overflow-hidden shadow-lg sm:px-6 sm:pt-8 md:p-6 lg:p-8 md:rounded-sm">
+            <div class="w-full relative flex bg-white px-4 pt-14 pb-8 overflow-hidden shadow-lg sm:px-6 sm:pt-8 md:p-6 lg:p-8 rounded-2xl">
                 <button type="button" x-ref="close" class="absolute top-2 right-2 min-h-[44px] min-w-[44px] text-gray-700 hover:text-gray-900 sm:top-4 sm:right-4 md:top-3 md:right-3 lg:top-4 lg:right-4" @click="$store.modal.close('{{ $id }}')">
                     <span class="sr-only">关闭</span>
                     <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">

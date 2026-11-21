@@ -1,8 +1,9 @@
 <x-guest-layout>
     <x-auth-card>
         <x-slot name="logo">
-            <a href="/">
-                <x-application-logo class="w-20 h-20 fill-current text-gray-500 text-4xl" />
+            <a href="/" class="flex items-center justify-center gap-3 text-xl font-bold text-slate-800">
+                <span class="brand-mark"><i class="fas fa-images"></i></span>
+                <span>{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</span>
             </a>
         </x-slot>
 
@@ -12,7 +13,8 @@
         <!-- Validation Errors -->
         <x-auth-validation-errors class="mb-4" :errors="$errors" />
 
-        <form method="POST" action="{{ route('login') }}">
+        <div class="mb-7 mt-8"><h1 class="text-2xl font-bold text-slate-800">欢迎回来</h1><p class="mt-2 text-sm text-slate-500">登录后管理你的图片资产和上传策略。</p></div>
+        <form method="POST" action="{{ route('login') }}" class="space-y-4">
             @csrf
 
             <!-- Email Address -->
@@ -23,7 +25,7 @@
             </div>
 
             <!-- Password -->
-            <div class="mt-4">
+            <div>
                 <x-label for="password" :value="__('Password')" />
 
                 <x-input id="password" class="block mt-1 w-full"
@@ -33,14 +35,14 @@
             </div>
 
             <!-- Remember Me -->
-            <div class="block mt-4">
+            <div class="block">
                 <label for="remember_me" class="inline-flex items-center">
                     <input id="remember_me" type="checkbox" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" name="remember">
                     <span class="ml-2 text-sm text-gray-600">{{ __('Remember me') }}</span>
                 </label>
             </div>
 
-            <div class="flex items-center justify-between mt-4">
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
                 <div class="flex items-center text-sm">
                     @if(\App\Utils::config(\App\Enums\ConfigKey::IsEnableRegistration))
                         没有账号？
@@ -56,7 +58,7 @@
                         </a>
                     @endif
 
-                    <x-button class="ml-3">
+                    <x-button class="ml-0">
                         {{ __('Log in') }}
                     </x-button>
                 </div>

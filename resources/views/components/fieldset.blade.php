@@ -1,9 +1,9 @@
-<fieldset>
-    <legend class="text-base font-medium text-gray-900">{{ $title }}</legend>
+<fieldset class="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+    <legend class="px-1 text-sm font-bold text-slate-800">{{ $title }}</legend>
     @isset($faq)
-        <p class="text-sm text-gray-500">{!! $faq !!}</p>
+        <p class="mt-1 text-xs leading-5 text-slate-500">{!! $faq !!}</p>
     @endisset
-    <div class="flex flex-wrap mt-4">
+    <div class="mt-3 flex flex-wrap gap-3">
         {{ $slot }}
     </div>
 </fieldset>

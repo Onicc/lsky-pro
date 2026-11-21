@@ -5,7 +5,7 @@
 @endpush
 
 <x-app-layout>
-    <div class="relative flex justify-between items-center px-2 py-2 z-[3] top-0 left-0 right-0 bg-white border-solid border-b">
+    <div class="panel relative z-[3] mb-4 flex items-center justify-between gap-3 px-3 py-2.5">
         <div class="space-x-2 flex justify-between items-center">
             <a class="text-sm py-2 px-3 hover:bg-gray-100 rounded text-gray-800" href="javascript:getAlbums()"><i class="fas fa-bars text-blue-500"></i> 相册</a>
             <div class="flex-row hidden lg:flex">
@@ -77,19 +77,19 @@
             </x-dropdown>
         </div>
     </div>
-    <div class="relative inset-0 h-full overflow-hidden">
+    <div class="panel relative inset-0 h-full overflow-hidden">
         <!-- content -->
         <div id="images-scroll" class="absolute inset-0 overflow-y-scroll dragselect select-none">
             <div id="images-grid" class="dragselect grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6"></div>
         </div>
         <!-- right drawer -->
-        <div id="drawer-mask" class="absolute hidden inset-0 bg-gray-500 bg-opacity-50 z-[2]" onclick="drawer.close()"></div>
-        <div id="drawer" class="absolute bg-white w-64 md:w-72 top-0 -right-[1000px] bottom-0 z-[2] flex flex-col transition-all duration-300">
-            <div class="flex justify-between items-center text-md px-3 py-1 border-b">
+        <div id="drawer-mask" class="absolute hidden inset-0 bg-slate-900/40 backdrop-blur-sm z-[2]" onclick="drawer.close()"></div>
+        <div id="drawer" class="drawer-modern absolute bg-white w-72 md:w-80 top-0 -right-[1000px] bottom-0 z-[2] flex flex-col transition-all duration-300">
+            <div class="drawer-head flex justify-between items-center text-md">
                 <span class="text-gray-600 truncate" id="drawer-title"></span>
                 <a href="javascript:drawer.close()" class="p-2" aria-label="关闭侧栏"><i class="fas fa-times text-blue-500"></i></a>
             </div>
-            <div id="drawer-content" class="overflow-y-auto"></div>
+            <div id="drawer-content" class="drawer-content overflow-y-auto"></div>
         </div>
     </div>
 

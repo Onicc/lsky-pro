@@ -1,7 +1,7 @@
 @props(['active'])
 
 @php
-$classes = "space-x-3 px-4 h-10 w-full flex items-center hover:bg-gray-100 text-slate-600 text-sm rounded-md" . (($active ?? false) ? ' bg-gray-100' : '');
+$classes = 'site-nav-link w-full flex items-center' . (($active ?? false) ? ' is-active' : '');
 @endphp
 
 <a {{ $attributes->merge(['class' => $classes]) }}>

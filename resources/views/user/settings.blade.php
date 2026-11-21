@@ -1,12 +1,11 @@
 @section('title', '设置')
 
 <x-app-layout>
-    <div class="my-6 md:my-9">
-        <p class="mb-3 font-semibold text-lg text-gray-700">基础设置</p>
-        <form action="{{ route('settings.update') }}" method="POST">
+    <div class="py-2">
+        <div class="mb-7"><p class="mb-2 text-xs font-bold uppercase tracking-[.16em] text-blue-600">Account settings</p><h1 class="page-title">设置</h1><p class="page-lead mt-2">管理个人资料、默认上传选项和链接权限。</p></div>
+        <form action="{{ route('settings.update') }}" method="POST" class="panel overflow-hidden">
             @csrf
-            <div class="overflow-hidden sm:rounded-md shadow-custom">
-                <div class="px-3 py-4 bg-white sm:p-6">
+                <div class="px-4 py-5 bg-white sm:p-7">
                     <div class="grid grid-cols-6 gap-6">
                         <div class="col-span-6 sm:col-span-3">
                             <label for="email" class="block text-sm font-medium text-gray-700">邮箱</label>
@@ -78,11 +77,10 @@
                             </x-fieldset>
                         </div>
                     </div>
-                    <div class="px-4 py-3 text-right sm:px-6">
+                    <div class="mt-6 border-t border-slate-100 px-0 pt-5 text-right">
                         <x-button>保存设置</x-button>
                     </div>
                 </div>
-            </div>
         </form>
     </div>
 

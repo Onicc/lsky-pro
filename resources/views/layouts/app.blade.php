@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="{{ Vite::asset('app.css') }}">
 </head>
 <body class="font-sans antialiased overflow-hidden">
-<div class="min-h-screen bg-gray-100" x-data x-cloak>
+<div class="app-shell" x-data x-cloak>
     @include('layouts.sidebar')
     @include('layouts.header')
     <div
@@ -26,7 +26,7 @@
         x-transition:leave="ease-in-out duration-500"
         x-transition:leave-start="opacity-100"
         x-transition:leave-end="opacity-0"
-        class="z-[9] bg-black bg-opacity-75 transition-opacity h-full w-full fixed inset-0 sm:hidden"
+        class="z-[9] bg-slate-900/50 backdrop-blur-sm transition-opacity h-full w-full fixed inset-0 sm:hidden"
         x-show="$store.sidebar.open"
         @click.outside="$store.sidebar.open = false"
         @close.stop="$store.sidebar.open = false"
@@ -36,7 +36,7 @@
 
     </div>
     <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded focus:bg-white focus:px-4 focus:py-2">前往主要内容</a>
-    <x-container id="main-content" role="main" tabindex="-1" class="flex flex-col overflow-y-auto absolute pb-14 top-14 left-0 right-0 bottom-0 transition-all duration-300 min-h-screen h-full">
+    <x-container id="main-content" role="main" tabindex="-1" class="site-content flex flex-col overflow-y-auto absolute left-0 right-0 bottom-0 transition-all duration-300 min-h-screen h-full">
         {{ $slot }}
     </x-container>
 </div>

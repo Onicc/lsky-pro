@@ -1,40 +1,20 @@
 @section('title', '仪表盘')
 
 <x-app-layout>
-    <div class="my-6 md:my-9">
-        <div class="space-y-6 md:space-y-0 md:grid md:grid-cols-2 xl:grid-cols-4 md:gap-x-4 xl:gap-x-8 md:gap-y-4 xl:gap-y-8">
-            <div class="flex bg-white rounded p-4 space-x-4 shadow-custom">
-                <i class="fas fa-images text-amber-500 text-5xl"></i>
-                <div class="flex flex-col">
-                    <p class="text-gray-700 text-sm">图片数量</p>
-                    <p class="text-gray-800 font-semibold text-xl">{{ $user->image_num }}</p>
-                </div>
-            </div>
-            <div class="flex bg-white rounded p-4 space-x-4 shadow-custom">
-                <i class="fas fa-hdd text-red-500 text-5xl"></i>
-                <div class="flex flex-col">
-                    <p class="text-gray-700 text-sm">可用储存</p>
-                    <p class="text-gray-800 font-semibold text-xl">{{ \App\Utils::formatSize(($user->capacity - $user->use_capacity) * 1024) }}</p>
-                </div>
-            </div>
-            <div class="flex bg-white rounded p-4 space-x-4 shadow-custom">
-                <i class="fas fa-hdd text-green-500 text-5xl"></i>
-                <div class="flex flex-col">
-                    <p class="text-gray-700 text-sm">使用储存</p>
-                    <p class="text-gray-800 font-semibold text-xl">{{ \App\Utils::formatSize($user->use_capacity * 1024) }}</p>
-                </div>
-            </div>
-            <div class="flex bg-white rounded p-4 space-x-4 shadow-custom">
-                <i class="fas fa-hdd text-emerald-500 text-5xl"></i>
-                <div class="flex flex-col">
-                    <p class="text-gray-700 text-sm">总储存</p>
-                    <p class="text-gray-800 font-semibold text-xl">{{ \App\Utils::formatSize($user->capacity * 1024) }}</p>
-                </div>
-            </div>
+    <div class="py-2">
+        <div class="mb-7 flex flex-wrap items-end justify-between gap-4">
+            <div><p class="mb-2 text-xs font-bold uppercase tracking-[.16em] text-blue-600">Workspace overview</p><h1 class="page-title">欢迎回来，{{ $user->name }}</h1><p class="page-lead mt-2">查看你的图片资产、储存空间和可用的上传策略。</p></div>
+            <a href="{{ route('upload') }}" class="modern-btn modern-btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm"><i class="fas fa-plus"></i> 上传图片</a>
+        </div>
+        <div class="stat-grid mb-7">
+            <div class="stat-card"><div><p class="stat-label">图片数量</p><p class="stat-value">{{ $user->image_num }}</p></div><span class="stat-icon"><i class="fas fa-images"></i></span></div>
+            <div class="stat-card"><div><p class="stat-label">可用储存</p><p class="stat-value text-[20px]">{{ \App\Utils::formatSize(($user->capacity - $user->use_capacity) * 1024) }}</p></div><span class="stat-icon"><i class="fas fa-database"></i></span></div>
+            <div class="stat-card"><div><p class="stat-label">使用储存</p><p class="stat-value text-[20px]">{{ \App\Utils::formatSize($user->use_capacity * 1024) }}</p></div><span class="stat-icon"><i class="fas fa-chart-pie"></i></span></div>
+            <div class="stat-card"><div><p class="stat-label">总储存</p><p class="stat-value text-[20px]">{{ \App\Utils::formatSize($user->capacity * 1024) }}</p></div><span class="stat-icon"><i class="fas fa-server"></i></span></div>
         </div>
 
-        <div class="flex md:mt-8 flex-col-reverse md:flex-row space-y-6 md:space-y-0 md:space-x-4">
-            <div class="w-full mt-4 md:mt-0">
+        <div class="grid gap-5 xl:grid-cols-[1.35fr_.65fr]">
+            <div class="w-full">
                 <x-box>
                     <x-slot name="title">可使用的策略</x-slot>
                     <x-slot name="content">
@@ -53,7 +33,7 @@
                     </x-slot>
                 </x-box>
             </div>
-            <div class="flex flex-col md:w-[70%] xl:w-[40%] space-y-8">
+            <div class="flex flex-col gap-5">
                 <x-box>
                     <x-slot name="title">我的信息</x-slot>
                     <x-slot name="content">
