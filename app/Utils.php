@@ -29,9 +29,12 @@ class Utils
             .'<defs><linearGradient id="g" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">'
             .'<stop stop-color="#2563eb"/><stop offset="1" stop-color="#22c1c3"/></linearGradient></defs>'
             .'<rect width="48" height="48" rx="15" fill="url(#g)"/>'
-            .'<path d="M15 19.5a3.5 3.5 0 0 1 3.5-3.5h2l1.7-2h3.6l1.7 2h2A3.5 3.5 0 0 1 33 19.5v9A3.5 3.5 0 0 1 29.5 32h-11a3.5 3.5 0 0 1-3.5-3.5v-9Z" fill="#fff" fill-opacity=".94"/>'
-            .'<circle cx="24" cy="24" r="4.5" fill="#2563eb" fill-opacity=".85"/><circle cx="24" cy="24" r="2.2" fill="#dff7ff"/>'
-            .'<path d="M35.5 12v5m-2.5-2.5h5" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-opacity=".85"/>'
+            .'<circle cx="24" cy="18" r="4.5" fill="#fff" fill-opacity=".95"/>'
+            .'<path d="M15.5 32c0-5 3.8-8.5 8.5-8.5s8.5 3.5 8.5 8.5H15.5Z" fill="#fff" fill-opacity=".95"/>'
+            .'<circle cx="12.5" cy="21" r="3" fill="#fff" fill-opacity=".72"/>'
+            .'<path d="M7 31c.2-3.3 2.3-5.5 5.5-5.5 1.8 0 3.2.6 4.2 1.7-1.1 1.1-1.9 2.4-2.3 3.8H7Z" fill="#fff" fill-opacity=".72"/>'
+            .'<circle cx="35.5" cy="21" r="3" fill="#fff" fill-opacity=".72"/>'
+            .'<path d="M33.6 27.2c1-1.1 2.4-1.7 4.2-1.7 3.2 0 5.3 2.2 5.5 5.5h-7.4c-.4-1.4-1.2-2.7-2.3-3.8Z" fill="#fff" fill-opacity=".72"/>'
             .'</svg>';
 
         return 'data:image/svg+xml;base64,'.base64_encode($svg);
