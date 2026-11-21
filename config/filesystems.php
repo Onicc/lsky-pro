@@ -37,8 +37,8 @@ return [
 
         'uploads' => [
             'driver' => 'local',
-            'root' => storage_path('app/uploads'),
-            'url' => env('APP_URL').'/i',
+            'root' => storage_path('app/media/objects'),
+            'url' => env('APP_URL').'/media',
             'visibility' => 'private',
         ],
     ],
@@ -54,6 +54,5 @@ return [
     |
     */
 
-    // Legacy and new upload URLs are served by the media controller.
     'links' => [],
 ];

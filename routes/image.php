@@ -12,6 +12,3 @@ Route::get('media/{key}/thumbnail.webp', [MediaController::class, 'thumbnail'])
 Route::get('{key}.{extension}', [MediaController::class, 'original'])
     ->where('key', '[a-zA-Z0-9]+')
     ->where('extension', '(?i:'.$imageTypes.')')->name('media.original');
-Route::get('{prefix}/{file}', [MediaController::class, 'legacy'])
-    ->where('prefix', '(?!media/|thumbnails/)[^/]+')
-    ->where('file', '(?i:.+\.(?:'.$imageTypes.'))')->name('media.legacy');

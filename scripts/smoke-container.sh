@@ -114,6 +114,8 @@ start_database
     app php artisan lsky:install --no-interaction
 "${compose[@]}" up -d --no-build --pull never --force-recreate app
 wait_for_status 200
+readiness=$(curl --fail --silent --show-error --max-time 10 "$APP_URL/up")
+jq -e '.status == "ready" and (.checks.database == true) and (.checks.migrations == true) and (.checks.storage == true)' <<< "$readiness" >/dev/null
 
 curl --fail --silent --show-error --max-time 10 "$APP_URL/login" -o "$work/login.html"
 "${compose[@]}" exec -T app cat public/build/manifest.json > "$work/manifest.json"

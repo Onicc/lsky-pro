@@ -39,17 +39,29 @@ Route::get('/', fn () => view('welcome'))
 Route::get('install', fn () => Installation::exists() ? redirect()->route('/') : view('install'))
     ->withoutMiddleware(CheckIsInstalled::class)->name('install');
 Route::get('up', function () {
+    $checks = [
+        'database' => false,
+        'migrations' => false,
+        'storage' => false,
+    ];
+
     try {
-        $ready = Installation::exists() && DB::table('configs')->exists()
-            && ! array_diff(
-                array_keys(app('migrator')->getMigrationFiles(database_path('migrations'))),
-                DB::table('migrations')->pluck('migration')->all(),
-            );
+        $checks['database'] = DB::table('configs')->exists();
+        $checks['migrations'] = ! array_diff(
+            array_keys(app('migrator')->getMigrationFiles(database_path('migrations'))),
+            DB::table('migrations')->pluck('migration')->all(),
+        );
+        $storageRoot = config('image.private_root');
+        $checks['storage'] = is_dir($storageRoot)
+            ? is_writable($storageRoot)
+            : is_writable(dirname($storageRoot));
     } catch (Throwable) {
-        $ready = false;
+        // Keep the readiness endpoint opaque while retaining individual checks for operators.
     }
 
-    return response()->json(['status' => $ready ? 'ready' : 'unavailable'], $ready ? 200 : 503)
+    $ready = Installation::exists() && ! in_array(false, $checks, true);
+
+    return response()->json(['status' => $ready ? 'ready' : 'unavailable', 'checks' => $checks], $ready ? 200 : 503)
         ->header('Cache-Control', 'no-store');
 })->withoutMiddleware(['web', CheckIsInstalled::class]);
 Route::post('upload', [Controller::class, 'upload']);

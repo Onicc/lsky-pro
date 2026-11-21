@@ -75,13 +75,6 @@ class Strategy extends Model
         return $defaultLocal || (bool) $this->configs->get('private_objects', false);
     }
 
-    public function isLegacyDeliveryManaged(): bool
-    {
-        return $this->key === StrategyKey::Local
-            && parse_url((string) $this->configs->get('url'), PHP_URL_HOST)
-                === parse_url((string) config('app.url'), PHP_URL_HOST);
-    }
-
     public function storageLocation(): array
     {
         return $this->configs->only([

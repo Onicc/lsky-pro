@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\GroupConfigKey;
 use App\Enums\ImagePermission;
 use App\Services\ImageService;
 use Illuminate\Support\Carbon;
@@ -160,19 +159,10 @@ class Image extends Model
 
     public function url(): Attribute
     {
-        return new Attribute(function () {
-            $groupOptions = $this->group?->configs;
-            if ($this->object_managed || $this->permission === ImagePermission::Private || $this->is_unhealthy
-                || $this->extension === 'svg' || $groupOptions?->get(GroupConfigKey::IsEnableOriginalProtection)
-                || ! $this->strategy) {
-                return route('media.original', ['key' => $this->key, 'extension' => $this->extension]);
-            }
-
-            $encoded = implode('/', array_map('rawurlencode', explode('/', ltrim($this->pathname, '/'))));
-
-            return rtrim((string) $this->strategy->configs->get('url'), '/').'/'.$encoded
-                .($this->strategy->configs->get('queries') ?: '');
-        });
+        return new Attribute(fn () => route('media.original', [
+            'key' => $this->key,
+            'extension' => $this->extension,
+        ]));
     }
 
     public function thumbUrl(): Attribute
@@ -207,19 +197,18 @@ class Image extends Model
         }
 
         return $this->filesystem ??= new Filesystem(
-            app(ImageService::class)->getAdapter($this->strategy, $this->object_managed ?? false),
+            app(ImageService::class)->getAdapter($this->strategy, true),
         );
     }
 
     public function storagePath(): string
     {
-        return $this->object_managed ? '_lsky-media/v1/'.$this->pathname : $this->pathname;
+        return '_lsky-media/v1/'.$this->pathname;
     }
 
     public function supportsPrivateMedia(): bool
     {
-        return $this->strategy?->supportsPrivateMedia() && ($this->object_managed
-            || $this->strategy->isLegacyDeliveryManaged());
+        return $this->strategy?->supportsPrivateMedia() && $this->object_managed;
     }
 
     public function user(): BelongsTo

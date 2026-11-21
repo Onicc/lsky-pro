@@ -81,6 +81,16 @@ class MediaTest extends TestCase
         $this->assertSame(2, $owner->images()->count());
     }
 
+    public function test_images_are_only_delivered_by_the_immutable_media_route(): void
+    {
+        $owner = User::factory()->create()->refresh();
+        $this->actingAs($owner);
+        $image = $this->upload(12, 14, 'test-route-only-0123456789');
+
+        $this->get($image->url)->assertOk();
+        $this->get('/i/same-name.png')->assertNotFound();
+    }
+
     public function test_write_failure_queues_cleanup_without_holding_a_database_transaction(): void
     {
         $owner = User::factory()->create()->refresh();
@@ -192,59 +202,6 @@ class MediaTest extends TestCase
         $this->assertFalse($image->filesystem()->fileExists($image->storagePath()));
         $this->assertFileDoesNotExist($image->thumbnailPath());
         $this->assertSame(0, MediaDeletion::query()->count());
-    }
-
-    public function test_legacy_paths_still_deliver_and_shared_objects_survive_until_last_reference(): void
-    {
-        $strategy = Strategy::query()->firstOrFail();
-        $strategy->configs = $strategy->configs->merge([
-            'root' => $this->media.'/legacy',
-            'url' => rtrim(route('/'), '/').'/legacy/nested',
-        ]);
-        $strategy->save();
-
-        $group = Group::query()->firstOrFail();
-        $file = UploadedFile::fake()->image('photo.png', 12, 14);
-        $bytes = file_get_contents($file->getPathname());
-        $references = [];
-        foreach (['2025/02', '/2025/02'] as $path) {
-            $image = new Image([
-                'path' => $path,
-                'name' => 'old photo.png',
-                'origin_name' => 'old photo.png',
-                'extension' => 'png',
-                'mimetype' => 'image/png',
-                'width' => 12,
-                'height' => 14,
-                'permission' => ImagePermission::LinkOnly,
-                'md5' => md5($bytes),
-                'sha1' => sha1($bytes),
-            ]);
-            $image->strategy_id = $strategy->id;
-            $image->group_id = $group->id;
-            $image->save();
-            $references[] = $image;
-        }
-
-        $image = $references[0];
-        $image->filesystem()->write($image->storagePath(), $bytes);
-        $this->assertSame($bytes, $this->get($image->url)->assertOk()->streamedContent());
-
-        $this->artisan('lsky:media:audit')->assertSuccessful();
-        $references[1]->update(['md5' => str_repeat('0', 32)]);
-        $this->artisan('lsky:media:audit')
-            ->expectsOutputToContain('conflicting_references')
-            ->expectsOutputToContain('digest_mismatch')
-            ->assertFailed();
-        $this->assertSame($bytes, $image->filesystem()->read($image->storagePath()));
-
-        app(UserService::class)->deleteImages([$image->id]);
-        $this->artisan('lsky:media:prune')->assertSuccessful();
-        $this->assertTrue($image->filesystem()->fileExists($image->storagePath()));
-
-        app(UserService::class)->deleteImages([$references[1]->id]);
-        $this->artisan('lsky:media:prune')->assertSuccessful();
-        $this->assertFalse($image->filesystem()->fileExists($image->storagePath()));
     }
 
     public function test_dynamic_image_watermarks_do_not_change_original_storage(): void

@@ -87,16 +87,15 @@ class PruneMedia extends Command
     {
         $strategy = $record->strategy_id ? Strategy::query()->find($record->strategy_id) : null;
 
-        // Older strategies can point at the same physical storage, so conservatively retain matching paths.
         $directory = ltrim($record->path, '/');
         $paths = $directory === '' || $directory === '.' ? ['', '.', '/'] : [$directory, '/'.$directory];
-        $stillReferenced = Image::query()->where('object_managed', $record->object_managed)
+        $stillReferenced = Image::query()->where('object_managed', true)
             ->whereIn('path', $paths)->where('name', $record->name)->exists();
 
         if ($strategy && ! $stillReferenced) {
             $image = new Image(['path' => $record->path, 'name' => $record->name]);
-            $image->object_managed = $record->object_managed;
-            $storage = new Filesystem($media->getAdapter($strategy, $record->object_managed));
+            $image->object_managed = true;
+            $storage = new Filesystem($media->getAdapter($strategy, true));
             $storage->delete($image->storagePath());
         }
 

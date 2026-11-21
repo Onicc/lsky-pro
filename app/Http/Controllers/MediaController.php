@@ -3,12 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ImagePermission;
-use App\Enums\StrategyKey;
 use App\Enums\UserStatus;
 use App\Enums\Watermark\Mode;
 use App\Exceptions\UploadException;
 use App\Models\Image;
-use App\Models\Strategy;
 use App\Services\ImageProcessor;
 use App\Services\MediaThumbnails;
 use Illuminate\Http\Request;
@@ -25,31 +23,6 @@ class MediaController extends Controller
             ->where('key', $key)->where('extension', strtolower($extension))->firstOrFail();
 
         return $this->deliver($request, $image, $processor);
-    }
-
-    public function legacy(Request $request, string $prefix, string $file, ImageProcessor $processor): Response
-    {
-        $requestPath = $prefix.'/'.$file;
-        $images = (new Image())->newCollection();
-        foreach (Strategy::query()->where('key', StrategyKey::Local)->get() as $strategy) {
-            $publicPrefix = trim(rawurldecode((string) parse_url((string) $strategy->configs->get('url'), PHP_URL_PATH)), '/');
-            if ($publicPrefix === '' || ! str_starts_with($requestPath, $publicPrefix.'/')) {
-                continue;
-            }
-
-            $pathname = substr($requestPath, strlen($publicPrefix) + 1);
-            $directory = dirname($pathname);
-            $matches = Image::query()->with('group')->where('strategy_id', $strategy->id)
-                ->where('object_managed', false)->where('name', basename($pathname))
-                ->whereIn('path', $directory === '.' ? ['', '.'] : [$directory, '/'.$directory])
-                ->get()->each(fn (Image $image) => $image->setRelation('strategy', $strategy));
-            $images = $images->merge($matches);
-        }
-
-        // A legacy physical path can be shared by several records. Each record must allow this raw path.
-        abort_if($images->isEmpty() || $images->contains(fn (Image $image) => ! $this->canView($request, $image)), 404);
-
-        return $this->deliver($request, $images->first(), $processor);
     }
 
     public function thumbnail(Request $request, string $key, MediaThumbnails $thumbnails): Response

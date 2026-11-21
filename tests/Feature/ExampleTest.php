@@ -13,6 +13,7 @@ class ExampleTest extends TestCase
         $this->get('/')->assertRedirect('/install');
         $this->get('/install')->assertOk()->assertSee('php artisan lsky:install');
         $this->post('/install')->assertMethodNotAllowed();
-        $this->getJson('/up')->assertStatus(503)->assertJson(['status' => 'unavailable']);
+        $this->getJson('/up')->assertStatus(503)->assertJsonPath('status', 'unavailable')
+            ->assertJsonStructure(['status', 'checks' => ['database', 'migrations', 'storage']]);
     }
 }

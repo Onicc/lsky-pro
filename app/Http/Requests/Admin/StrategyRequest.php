@@ -25,7 +25,7 @@ class StrategyRequest extends FormRequest
         $checkUrl = function ($attribute, $value, $fail) {
             $path = Strategy::getRootPath($value);
             if ($path === '' || ! preg_match('/\A[\p{L}\p{N}_-]+\z/u', $path)) {
-                $fail('本地策略的旧链接地址需要一个有效的路径前缀');
+                $fail('本地策略的访问地址需要一个有效的路径前缀');
             } elseif (in_array($path, [config('app.thumbnail_path'), 'fonts', 'css', 'js', 'media'], true)) {
                 $fail('系统保留路径：'.$path);
             }

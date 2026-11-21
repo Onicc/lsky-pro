@@ -500,13 +500,11 @@ class ImageService
 
     private function localRoot(?string $root, bool $managed): string
     {
-        $legacy = config('filesystems.disks.uploads.root');
+        $default = config('filesystems.disks.uploads.root');
 
-        if ($managed && (! $root || $root === $legacy)) {
-            return config('image.private_root').'/objects';
-        }
-
-        return $root ?: $legacy;
+        return ! $root || $root === $default
+            ? config('image.private_root').'/objects'
+            : $root;
     }
 
     /**

@@ -82,7 +82,7 @@ class ImageController extends Controller
                 return $this->fail('所选图片已不存在');
             }
             if ($permission === 'private' && $images->contains(fn (Image $image) => ! $image->supportsPrivateMedia())) {
-                return $this->fail('所选图片的旧链接或储存位置仍可匿名读取，请先迁移到私有储存');
+                return $this->fail('所选图片的储存位置仍可匿名读取，请先迁移到私有储存');
             }
 
             $user->images()->whereKey($ids)->update([
