@@ -4,20 +4,20 @@
 
 ## 当前版本
 
-- 镜像：`onicc/lsky-pro:3.2.4`
+- 镜像：`onicc/lsky-pro:3.2.5`
 - 稳定别名：`onicc/lsky-pro:latest`
 - 平台：Linux amd64
 - 许可证：GPL-3.0-only
 - 当前摘要：`sha256:ae2c46b841b1d90de446641e886bd15e99c7aebda092527db056f0c683ee7712`
 
-`3.2.4` 和 `latest` 指向同一个正式镜像。生产环境建议固定版本标签或完整摘要。
+`3.2.5` 和 `latest` 指向同一个正式镜像。生产环境建议固定版本标签或完整摘要。
 
 ## 快速开始
 
 ```bash
 mkdir lsky-pro && cd lsky-pro
-curl -fsSLO https://raw.githubusercontent.com/Onicc/lsky-pro/v3.2.4/compose.yaml
-curl -fsSLO https://raw.githubusercontent.com/Onicc/lsky-pro/v3.2.4/docker/compose.env.example
+curl -fsSLO https://raw.githubusercontent.com/Onicc/lsky-pro/v3.2.5/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/Onicc/lsky-pro/v3.2.5/docker/compose.env.example
 mv compose.env.example .env
 ```
 
@@ -59,9 +59,9 @@ curl -fsS https://your-domain.example/up
 ## 文档和项目链接
 
 - [项目仓库](https://github.com/Onicc/lsky-pro)
-- [部署文档](https://github.com/Onicc/lsky-pro/blob/v3.2.4/docs/deployment.md)
-- [媒体运维](https://github.com/Onicc/lsky-pro/blob/v3.2.4/docs/media-operations.md)
-- [审计报告](https://github.com/Onicc/lsky-pro/blob/v3.2.4/docs/audit/2026-11-19-maintenance-audit.md)
+- [部署文档](https://github.com/Onicc/lsky-pro/blob/v3.2.5/docs/deployment.md)
+- [媒体运维](https://github.com/Onicc/lsky-pro/blob/v3.2.5/docs/media-operations.md)
+- [审计报告](https://github.com/Onicc/lsky-pro/blob/v3.2.5/docs/audit/2026-11-19-maintenance-audit.md)
 - [发布记录](https://github.com/Onicc/lsky-pro/releases)
 
 本镜像按全新安装基线发布。旧物理路径直链已移除。正式部署前请完成反向代理、TLS、主机补丁、数据库备份、对象存储备份和恢复演练。
