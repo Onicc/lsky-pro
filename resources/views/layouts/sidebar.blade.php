@@ -11,7 +11,7 @@
     </div>
 
     <div class="site-nav flex flex-col justify-between container mx-auto h-full overflow-scroll overscroll-contain scrollbar-none">
-        <div>
+        <div class="site-nav-links min-h-0 flex-1 overflow-y-auto">
             <div class="site-nav-section flex flex-col">
                 <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                     <x-slot name="icon"><span class="nav-icon"><i class="fas fa-chart-pie"></i></span></x-slot>
