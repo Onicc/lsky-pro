@@ -1,13 +1,14 @@
 <x-guest-layout>
     <x-auth-card>
         <x-slot name="logo">
-            <a href="/">
-                <x-application-logo class="w-20 h-20 fill-current text-gray-500 text-4xl" />
+            <a href="/" class="auth-brand">
+                <span class="brand-mark"><i class="fas fa-images"></i></span>
+                <span>{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</span>
             </a>
         </x-slot>
 
         <div class="mb-4 text-sm text-gray-600">
-            {{ __('Forgot your password? No problem. Just let us know your email address and we will email you a password reset link that will allow you to choose a new one.') }}
+            输入注册邮箱，我们会发送密码重置链接，帮助你设置新密码。
         </div>
 
         <!-- Session Status -->
@@ -21,14 +22,14 @@
 
             <!-- Email Address -->
             <div>
-                <x-label for="email" :value="__('Email')" />
+                <x-label for="email" value="邮箱" />
 
                 <x-input id="email" class="block mt-1 w-full" type="email" name="email" :value="old('email')" required autofocus />
             </div>
 
             <div class="flex items-center justify-end mt-4">
                 <x-button>
-                    {{ __('Email Password Reset Link') }}
+                    发送密码重置邮件
                 </x-button>
             </div>
         </form>

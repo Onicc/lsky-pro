@@ -1,13 +1,14 @@
 <x-guest-layout>
     <x-auth-card>
         <x-slot name="logo">
-            <a href="/">
-                <x-application-logo class="w-20 h-20 fill-current text-gray-500 text-4xl" />
+            <a href="/" class="auth-brand">
+                <span class="brand-mark"><i class="fas fa-images"></i></span>
+                <span>{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</span>
             </a>
         </x-slot>
 
         <div class="mb-4 text-sm text-gray-600">
-            {{ __('Thanks for signing up! Before getting started, could you verify your email address by clicking on the link we just emailed to you? If you didn\'t receive the email, we will gladly send you another.') }}
+            感谢注册。请查收邮箱中的验证链接，完成账户激活。如果没有收到邮件，可以重新发送。
         </div>
 
         @if (session('status') == 'verification-link-sent')
@@ -22,7 +23,7 @@
 
                 <div>
                     <x-button>
-                        {{ __('Resend Verification Email') }}
+                重新发送验证邮件
                     </x-button>
                 </div>
             </form>
@@ -31,7 +32,7 @@
                 @csrf
 
                 <button type="submit" class="underline text-sm text-gray-600 hover:text-gray-900">
-                    {{ __('Log Out') }}
+                    退出登录
                 </button>
             </form>
         </div>

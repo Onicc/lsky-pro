@@ -1,13 +1,14 @@
 <x-guest-layout>
     <x-auth-card>
         <x-slot name="logo">
-            <a href="/">
-                <x-application-logo class="w-20 h-20 fill-current text-gray-500 text-4xl" />
+            <a href="/" class="auth-brand">
+                <span class="brand-mark"><i class="fas fa-images"></i></span>
+                <span>{{ \App\Utils::config(\App\Enums\ConfigKey::AppName) }}</span>
             </a>
         </x-slot>
 
         <div class="mb-4 text-sm text-gray-600">
-            {{ __('This is a secure area of the application. Please confirm your password before continuing.') }}
+            这是受保护的操作，请先确认当前账户密码。
         </div>
 
         <!-- Validation Errors -->
@@ -18,7 +19,7 @@
 
             <!-- Password -->
             <div>
-                <x-label for="password" :value="__('Password')" />
+                <x-label for="password" value="密码" />
 
                 <x-input id="password" class="block mt-1 w-full"
                                 type="password"
@@ -28,7 +29,7 @@
 
             <div class="flex justify-end mt-4">
                 <x-button>
-                    {{ __('Confirm') }}
+                    确认
                 </x-button>
             </div>
         </form>
