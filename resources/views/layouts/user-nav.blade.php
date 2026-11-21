@@ -3,7 +3,7 @@
     <x-slot name="trigger">
         <button type="button" class="site-account-trigger flex items-center gap-2" id="account-menu-button" aria-expanded="false" aria-haspopup="true">
             <span class="sr-only">打开账户菜单</span>
-            <img class="h-8 w-8 rounded-full" src="{{ Auth::user()->avatar }}" alt="">
+            <img class="h-8 w-8 rounded-xl" src="{{ Auth::user()->avatar }}" alt="">
             <span class="sm:block hidden font-semibold">{{ Auth::user()->name }}</span>
         </button>
     </x-slot>

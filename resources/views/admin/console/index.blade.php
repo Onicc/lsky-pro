@@ -78,7 +78,7 @@
         </div>
 
         <p class="mb-3 font-semibold text-lg text-gray-700">趋势</p>
-        <div class="relative p-4 rounded-md bg-white h-80 mb-8 shadow-custom" id="chart">
+        <div class="console-chart relative p-4 rounded-md bg-white h-[360px] md:h-[390px] mb-8 shadow-custom" id="chart">
             <canvas></canvas>
         </div>
 
@@ -159,20 +159,26 @@
                 options = {
                     responsive: true,
                     title: {
-                        text: '近 30 天内统计'
+                            text: '近 30 天统计',
+                            left: 16,
+                            top: 12,
+                            textStyle: {fontSize: 16, fontWeight: 700, color: '#172033'}
                     },
                     tooltip: {
                         trigger: 'axis'
                     },
                     legend: {
-                        top: '10%',
+                        top: 46,
+                        left: 16,
+                        right: 120,
                         type: 'scroll',
                         data: @json($fields)
                     },
                     grid: {
-                        left: '3%',
-                        right: '3%',
-                        bottom: '3%',
+                        left: 16,
+                        right: 18,
+                        top: 92,
+                        bottom: 28,
                         containLabel: true
                     },
                     toolbox: {

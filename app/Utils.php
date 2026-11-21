@@ -25,11 +25,14 @@ class Utils
 
     public static function getAvatar(string $name): string
     {
-        $initial = e(mb_strtoupper(mb_substr(trim($name), 0, 1)) ?: '?');
         $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">'
-            .'<rect width="48" height="48" rx="24" fill="#394591"/>'
-            .'<text x="24" y="31" fill="#fff" text-anchor="middle" font-size="22" font-family="sans-serif">'
-            .$initial.'</text></svg>';
+            .'<defs><linearGradient id="g" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">'
+            .'<stop stop-color="#2563eb"/><stop offset="1" stop-color="#22c1c3"/></linearGradient></defs>'
+            .'<rect width="48" height="48" rx="15" fill="url(#g)"/>'
+            .'<path d="M15 19.5a3.5 3.5 0 0 1 3.5-3.5h2l1.7-2h3.6l1.7 2h2A3.5 3.5 0 0 1 33 19.5v9A3.5 3.5 0 0 1 29.5 32h-11a3.5 3.5 0 0 1-3.5-3.5v-9Z" fill="#fff" fill-opacity=".94"/>'
+            .'<circle cx="24" cy="24" r="4.5" fill="#2563eb" fill-opacity=".85"/><circle cx="24" cy="24" r="2.2" fill="#dff7ff"/>'
+            .'<path d="M35.5 12v5m-2.5-2.5h5" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-opacity=".85"/>'
+            .'</svg>';
 
         return 'data:image/svg+xml;base64,'.base64_encode($svg);
     }

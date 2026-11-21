@@ -17,7 +17,7 @@
                             </div>
                         </a>
                         <a target="_blank" rel="noopener noreferrer" href="{{ $image->user->url ?: 'javascript:void(0)' }}" class="flex justify-between items-center px-3 py-2 bg-white overflow-hidden group">
-                            <img src="{{ $image->user->avatar }}" alt="" loading="lazy" class="w-6 h-6 rounded-full">
+                            <img src="{{ $image->user->avatar }}" alt="" loading="lazy" class="w-6 h-6 rounded-xl">
                             <p class="ml-2 truncate group-hover:text-blue-500">{{ $image->user->name }}</p>
                         </a>
                     </div>

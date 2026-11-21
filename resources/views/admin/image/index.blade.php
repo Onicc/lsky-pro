@@ -29,14 +29,14 @@
                         <i data-id="{{ $image->id }}" class="delete fas fa-trash text-red-500 w-4 h-4"></i>
                     </div>
 
-                    <div class="p-2 bg-white w-full flex items-center">
+                    <div class="admin-image-meta bg-white w-full flex items-center">
                         @if($image->user)
-                            <div class="item-user flex items-center">
-                                <img src="{{ $image->user->avatar }}" class="w-6 h-6 rounded-full">
+                            <div class="item-user flex min-w-0 items-center">
+                                <img src="{{ $image->user->avatar }}" class="admin-image-avatar shrink-0 rounded-lg">
                                 <span class="ml-2 truncate group-hover:text-blue-500">{{ $image->user->name }}</span>
                             </div>
                         @else
-                            <div class="w-6 h-6 rounded-full overflow-hidden">
+                            <div class="admin-image-avatar shrink-0 overflow-hidden rounded-lg">
                                 <x-default-avatar/>
                             </div>
                             <span class="ml-2">游客</span>
