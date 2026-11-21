@@ -753,12 +753,12 @@
                     text: '复制链接',
                     subMenu: [
                         {
-                            text: 'Url',
+                            text: 'URL',
                             classes: ['copy'],
                             attributes: {"data-link-type": "url"},
                         },
                         {
-                            text: 'Html',
+                            text: 'HTML',
                             classes: ['copy'],
                             attributes: {"data-link-type": "html"},
                         },
@@ -773,12 +773,12 @@
                             attributes: {"data-link-type": "markdown"},
                         },
                         {
-                            text: 'Markdown with link',
+                            text: 'Markdown（带链接）',
                             classes: ['copy'],
                             attributes: {"data-link-type": "markdown_with_link"},
                         },
                         {
-                            text: 'Thumbnail url',
+                            text: '缩略图 URL',
                             classes: ['copy'],
                             attributes: {"data-link-type": "thumbnail_url"},
                         },
