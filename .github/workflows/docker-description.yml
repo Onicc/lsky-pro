@@ -18,7 +18,7 @@ jobs:
       - name: Update repository description
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_DESCRIPTION_TOKEN || secrets.DOCKERHUB_TOKEN }}
         run: |
           set -euo pipefail
           : "${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}"
