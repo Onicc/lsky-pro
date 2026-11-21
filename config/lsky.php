@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'version' => '3.2.6',
+    'version' => '3.2.7',
     'install' => [
         'admin_email' => env('LSKY_ADMIN_EMAIL'),
         'admin_password' => env('LSKY_ADMIN_PASSWORD'),
