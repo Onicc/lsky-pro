@@ -8,7 +8,7 @@
 - 稳定别名：`onicc/lsky-pro:latest`
 - 平台：Linux amd64
 - 许可证：GPL-3.0-only
-- 当前摘要：`sha256:2de99959448cd8503fb09456a68f4974ad8a72a4f2b48a67e9fef0f499433cbd`
+- 当前摘要：`sha256:4c37b90e8ecd17810d468f005f7150baa699ddb19d8f18fb6379151286ef6f70`
 
 `3.2.1` 和 `latest` 指向同一个正式镜像。生产环境建议固定版本标签或完整摘要。
 
