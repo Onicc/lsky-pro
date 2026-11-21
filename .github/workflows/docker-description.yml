@@ -26,12 +26,12 @@ jobs:
           : "${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}"
           : "${DOCKERHUB_TOKEN:?DOCKERHUB_TOKEN is required}"
 
-          auth=$(jq -n --arg username "$DOCKERHUB_USERNAME" --arg password "$DOCKERHUB_TOKEN" \
-            '{username: $username, password: $password}' \
+          auth=$(jq -n --arg identifier "$DOCKERHUB_USERNAME" --arg secret "$DOCKERHUB_TOKEN" \
+            '{identifier: $identifier, secret: $secret}' \
             | curl --fail --silent --show-error --retry 3 \
-                -X POST 'https://hub.docker.com/v2/users/login/' \
+                -X POST 'https://hub.docker.com/v2/auth/token' \
                 -H 'Content-Type: application/json' --data-binary @-)
-          bearer=$(jq -er '.token' <<< "$auth")
+          bearer=$(jq -er '.access_token' <<< "$auth")
           description='安全优先的自托管图床与图片管理服务，支持 Docker、SQLite/MySQL/PostgreSQL、S3 和 MinIO。'
           jq -n --arg description "$description" --rawfile full_description docs/dockerhub-overview.md \
             '{description: $description, full_description: $full_description}' > "$RUNNER_TEMP/dockerhub-description.json"
@@ -42,7 +42,7 @@ jobs:
             "https://hub.docker.com/v2/namespaces/${DOCKERHUB_USERNAME}/repositories/lsky-pro/"; do
             status=$(curl --silent --show-error --retry 3 --output "$RUNNER_TEMP/dockerhub-response.json" \
               --write-out '%{http_code}' -X PATCH "$endpoint" \
-              -H "Authorization: JWT $bearer" \
+              -H "Authorization: Bearer $bearer" \
               -H 'Content-Type: application/json' \
               --data-binary @"$RUNNER_TEMP/dockerhub-description.json")
             if [[ "$status" == 200 || "$status" == 201 ]]; then
