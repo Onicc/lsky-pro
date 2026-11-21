@@ -30,7 +30,7 @@ jobs:
                 -X POST 'https://hub.docker.com/v2/auth/token' \
                 -H 'Content-Type: application/json' --data-binary @-)
           bearer=$(jq -er '.access_token' <<< "$auth")
-          description='安全优先的自托管图床与图片管理服务，支持 Docker、SQLite/MySQL/PostgreSQL、S3 和 MinIO。'
+          description='自托管图床与图片管理服务，支持 Docker、SQLite/MySQL/PostgreSQL、S3 和 MinIO。'
           jq -n --arg description "$description" --rawfile full_description docs/dockerhub-overview.md \
             '{description: $description, full_description: $full_description}' > "$RUNNER_TEMP/dockerhub-description.json"
 
