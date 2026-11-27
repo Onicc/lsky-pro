@@ -28,9 +28,10 @@ jobs:
           set -euo pipefail
           : "${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}"
           : "${DOCKERHUB_TOKEN:?DOCKERHUB_TOKEN is required}"
+          namespace="${DOCKERHUB_USERNAME,,}"
 
           auth_response="$RUNNER_TEMP/dockerhub-auth.json"
-          auth_status=$(jq -n --arg identifier "$DOCKERHUB_USERNAME" --arg secret "$DOCKERHUB_TOKEN" \
+          auth_status=$(jq -n --arg identifier "$namespace" --arg secret "$DOCKERHUB_TOKEN" \
             '{identifier: $identifier, secret: $secret}' \
             | curl --silent --show-error --retry 3 --max-time 15 --output "$auth_response" \
                 --write-out '%{http_code}' -X POST 'https://hub.docker.com/v2/auth/token' \
@@ -50,8 +51,8 @@ jobs:
 
           updated=false
           for endpoint in \
-            "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/lsky-pro/" \
-            "https://hub.docker.com/v2/namespaces/${DOCKERHUB_USERNAME}/repositories/lsky-pro/"; do
+            "https://hub.docker.com/v2/repositories/$namespace/lsky-pro/" \
+            "https://hub.docker.com/v2/namespaces/$namespace/repositories/lsky-pro/"; do
             status=$(curl --silent --show-error --retry 3 --output "$RUNNER_TEMP/dockerhub-response.json" \
               --write-out '%{http_code}' -X PATCH "$endpoint" \
               -H "Authorization: Bearer $jwt" \
@@ -69,7 +70,7 @@ jobs:
           fi
 
           result=$(curl --fail --silent --show-error --retry 3 \
-            "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/lsky-pro/")
+            "https://hub.docker.com/v2/repositories/$namespace/lsky-pro/")
           jq -e --arg description "$description" --rawfile overview docs/dockerhub-overview.md \
             '.description == $description and ((.full_description | rtrimstr("\n")) == ($overview | rtrimstr("\n")))' \
             <<< "$result" >/dev/null
