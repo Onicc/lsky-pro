@@ -3,7 +3,7 @@
 use App\Http\Controllers\MediaController;
 use Illuminate\Support\Facades\Route;
 
-$imageTypes = 'jpg|jpeg|png|gif|tif|tiff|bmp|ico|psd|webp|svg';
+$imageTypes = 'jpg|jpeg|png|gif|tif|tiff|bmp|ico|psd|webp|heic|svg';
 
 Route::get('media/review/{token}', [MediaController::class, 'review'])
     ->where('token', '[a-f0-9]{32}')->name('media.review');

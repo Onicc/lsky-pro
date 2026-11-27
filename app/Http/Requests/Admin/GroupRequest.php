@@ -39,7 +39,7 @@ class GroupRequest extends FormRequest
             'configs.path_naming_rule' => 'max:400',
             'configs.file_naming_rule' => 'max:400',
             'configs.accepted_file_suffixes' => 'required|array',
-            'configs.accepted_file_suffixes.*' => 'in:jpeg,jpg,png,gif,tif,tiff,bmp,ico,psd,webp',
+            'configs.accepted_file_suffixes.*' => 'in:jpeg,jpg,png,gif,tif,tiff,bmp,ico,psd,webp,heic',
 
             'configs.is_enable_scan' => 'boolean',
             'configs.scanned_action' => [

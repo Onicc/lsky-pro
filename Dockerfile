@@ -19,7 +19,7 @@ RUN set -eux; \
     savedAptMark="$(apt-mark showmanual)"; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        ca-certificates curl $PHPIZE_DEPS libfreetype-dev libicu-dev \
+        ca-certificates curl $PHPIZE_DEPS libfreetype-dev libheif-plugin-libde265 libheif-plugin-x265 libicu-dev \
         libjpeg62-turbo-dev libmagickwand-dev libpng-dev libpq-dev libwebp-dev libzip-dev; \
     docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp; \
     docker-php-ext-install -j"$(nproc)" bcmath exif ftp gd intl pcntl pdo_mysql pdo_pgsql zip; \
@@ -30,7 +30,7 @@ RUN set -eux; \
     pecl install /tmp/imagick.tgz; \
     docker-php-ext-enable imagick; \
     apt-mark auto '.*' > /dev/null; \
-    apt-mark manual $savedAptMark ca-certificates curl; \
+    apt-mark manual $savedAptMark ca-certificates curl libheif-plugin-libde265 libheif-plugin-x265; \
     find /usr/local/lib/php/extensions -type f -name '*.so' -exec ldd '{}' ';' \
         | awk '/=> \// { path = $(NF-1); sub(/^\/(usr\/)?/, "", path); print "*" path }' | sort -u \
         | xargs -r dpkg-query --search \

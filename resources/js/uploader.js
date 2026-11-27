@@ -48,6 +48,48 @@ async function copyText(text) {
     }
 }
 
+export function uploadSelect() {
+    return {
+        open: false,
+        value: '',
+        init() {
+            this.value = this.$el.querySelector('input').value;
+        },
+        show() {
+            const { trigger, list } = this.$refs;
+            const bounds = trigger.getBoundingClientRect();
+            const viewport = this.$el.closest('.site-content')?.getBoundingClientRect();
+            const below = Math.min(window.innerHeight, viewport?.bottom ?? Infinity) - bounds.bottom - 12;
+            const above = bounds.top - Math.max(0, viewport?.top ?? 0) - 12;
+            const useAbove = below < Math.min(154, list.children.length * 36 + 10) && above > below;
+            list.classList.toggle('is-above', useAbove);
+            list.style.setProperty('--upload-menu-space', `${Math.max(40, useAbove ? above : below)}px`);
+            this.open = true;
+            this.$nextTick(() => list.querySelector('[aria-selected="true"]')?.focus());
+        },
+        close() {
+            this.$refs.trigger.focus();
+            this.open = false;
+        },
+        choose(option) {
+            this.value = option.dataset.value;
+            this.$refs.input.value = this.value;
+            this.$refs.label.textContent = option.firstElementChild.textContent;
+            this.close();
+        },
+        move(event) {
+            const options = Array.from(this.$refs.list.children);
+            const index = options.indexOf(event.target);
+            const target = {
+                ArrowDown: index + 1, ArrowUp: index - 1, Home: 0, End: options.length - 1,
+            }[event.key];
+            if (target === undefined) return;
+            event.preventDefault();
+            options[Math.max(0, Math.min(target, options.length - 1))].focus();
+        },
+    };
+}
+
 export function mountUploader(root) {
     const find = name => root.querySelector(`[data-upload-${name}]`);
     const picker = find('picker');
@@ -59,6 +101,7 @@ export function mountUploader(root) {
     const notice = find('alert');
     const copyStatus = find('copy-status');
     const format = find('format');
+    const originalFormat = find('original-format');
     const start = find('start');
     const clear = find('clear');
     const copy = find('copy');
@@ -77,6 +120,13 @@ export function mountUploader(root) {
         status.textContent = `${items.length} 张，完成 ${complete} 张` + (failures ? `，失败 ${failures} 张` : '');
         start.disabled = !items.some(item => item.state === 'queued' && !item.scheduled);
         clear.disabled = complete === 0;
+        if (originalFormat) {
+            originalFormat.hidden = !items.some(item => item.links?.original_url);
+            if (originalFormat.hidden && format.value === originalFormat.value) {
+                format.value = 'url';
+                items.forEach(showState);
+            }
+        }
         copy.disabled = !items.some(item => item.links?.[format.value]);
     }
 
@@ -90,7 +140,10 @@ export function mountUploader(root) {
         item.parts.link.value = value;
         item.parts.copy.hidden = !value;
         item.parts.action.textContent = working ? '取消' : retry ? '重试' : '移除';
-        if (item.state === 'success' && root.dataset.hideFinishedPreviews === '1') releasePreview(item);
+        if (item.state === 'success' && root.dataset.hideFinishedPreviews === '1') {
+            item.parts.placeholder.hidden = true;
+            releasePreview(item);
+        }
     }
 
     function releasePreview(item) {
@@ -117,10 +170,11 @@ export function mountUploader(root) {
                 continue;
             }
             const row = find('row').content.firstElementChild.cloneNode(true);
-            const parts = Object.fromEntries(['preview', 'name', 'state', 'progress', 'link', 'copy', 'action']
+            const parts = Object.fromEntries(['preview', 'placeholder', 'name', 'state', 'progress', 'link', 'copy', 'action']
                 .map(name => [name, row.querySelector(`[data-${name}]`)]));
-            const item = { file, row, parts, id: newRequestId(), state: 'queued', scheduled: immediate };
+            const item = { file, row, parts, ext, id: newRequestId(), state: 'queued', scheduled: immediate };
             parts.name.textContent = file.name;
+            parts.placeholder.hidden = ext !== 'heic';
             if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico', 'avif'].includes(ext)) {
                 item.objectUrl = URL.createObjectURL(file);
                 parts.preview.src = item.objectUrl;
@@ -167,7 +221,7 @@ export function mountUploader(root) {
             item.destination = Object.fromEntries([
                 ['strategy_id', find('strategy')?.value],
                 ['album_id', find('album')?.value],
-                ['permission', find('permission')?.value],
+                ['permission', root.querySelector('[data-upload-permission]:checked')?.value],
                 ['retention_days', retention],
             ].filter(([, value]) => value !== undefined));
         }
@@ -206,6 +260,13 @@ export function mountUploader(root) {
         xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300 && xhr.response?.status && xhr.response?.data?.links) {
                 item.links = xhr.response.data.links;
+                if (item.ext === 'heic' && root.dataset.hideFinishedPreviews !== '1') {
+                    item.parts.preview.addEventListener('load', () => {
+                        item.parts.placeholder.hidden = true;
+                        item.parts.preview.hidden = false;
+                    }, { once: true });
+                    item.parts.preview.src = item.links.thumbnail_url;
+                }
                 window.utils.setCapacityProgress(Number(xhr.response.data.size) || 0);
                 finish('success');
             } else {

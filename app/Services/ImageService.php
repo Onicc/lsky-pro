@@ -132,6 +132,7 @@ class ImageService
         $image->expires_at = $expiresAt;
         $image->object_managed = true;
         $image->thumbnail_pending_at = now();
+        $image->setRelation('group', $group);
         $image->setRelation('strategy', $strategy);
 
         $requestKey = $request->header('Idempotency-Key');
@@ -194,7 +195,7 @@ class ImageService
             if ($configs->get(GroupConfigKey::IsEnableScan)) {
                 $settings = (array) $configs->get(GroupConfigKey::ScanConfigs, []);
                 $driver = (string) ($settings['driver'] ?? '');
-                $image->is_unhealthy = $this->scan($driver, collect($settings['drivers'][$driver] ?? []), $image, $path);
+                $image->is_unhealthy = $this->scanStoredFormat($driver, collect($settings['drivers'][$driver] ?? []), $image, $path);
                 if ($image->is_unhealthy && $configs->get(GroupConfigKey::ScannedAction) === 'delete') {
                     throw new UploadException('图片涉嫌违规，禁止上传');
                 }
@@ -557,6 +558,30 @@ class ImageService
             if ($count >= $value) {
                 throw new UploadException("每{$item['str']}内你最多可以上传 {$value} 张图片");
             }
+        }
+    }
+
+    private function scanStoredFormat(string $driver, Collection $configs, Image $image, string $path): bool
+    {
+        if ($image->extension !== 'heic') {
+            return $this->scan($driver, $configs, $image, $path);
+        }
+
+        $jpeg = tempnam(sys_get_temp_dir(), 'lsky-review-');
+        if ($jpeg === false) {
+            throw new UploadException('暂时无法准备 HEIC 内容审核');
+        }
+
+        try {
+            $this->processor->withPixelBudget($image->width, $image->height,
+                fn () => $this->processor->heicModerationImage($path, $jpeg));
+            $review = clone $image;
+            $review->mimetype = 'image/jpeg';
+            $review->origin_name = pathinfo($image->origin_name, PATHINFO_FILENAME).'.jpg';
+
+            return $this->scan($driver, $configs, $review, $jpeg);
+        } finally {
+            unlink($jpeg);
         }
     }
 

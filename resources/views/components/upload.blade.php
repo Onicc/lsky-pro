@@ -1,11 +1,11 @@
 @php
     $group = $_group;
     $user = auth()->user();
-    $strategies = $group->strategies;
-    $extensions = array_diff($group->configs->get(\App\Enums\GroupConfigKey::AcceptedFileSuffixes, []), ['svg']);
+    $strategies = $group->strategies->sortBy('id')->pluck('name', 'id');
+    $extensions = array_intersect($group->configs->get(\App\Enums\GroupConfigKey::AcceptedFileSuffixes, []), \App\Services\ImageProcessor::SUPPORTED_EXTENSIONS);
     $maxBytes = $group->configs->get(\App\Enums\GroupConfigKey::MaximumFileSize, 5120) * 1024;
     $userConfig = $user?->configs;
-    $albums = $user?->albums()->orderBy('name')->get(['id', 'name']) ?? collect();
+    $albums = collect([0 => '不归入相册'])->union($user?->albums()->orderBy('name')->pluck('name', 'id') ?? []);
     $defaultAlbum = (int) $userConfig?->get(\App\Enums\UserConfigKey::DefaultAlbum);
     $defaultStrategy = (int) $userConfig?->get(\App\Enums\UserConfigKey::DefaultStrategy);
     $defaultPermission = $userConfig?->get(\App\Enums\UserConfigKey::DefaultPermission, \App\Enums\ImagePermission::LinkOnly);
@@ -50,24 +50,11 @@
                     </div>
                 </div>
                 <div class="upload-options-inline" aria-label="上传选项">
-                    <div class="upload-option-group">
-                        <span class="upload-option-label">储存策略</span>
-                        <select data-upload-strategy>
-                            @foreach($strategies as $strategy)
-                                <option value="{{ $strategy->id }}" @selected($defaultStrategy === $strategy->id)>{{ $strategy->name }}</option>
-                            @endforeach
-                        </select>
-                    </div>
+                    <x-upload-select name="strategy" label="储存策略" icon="fa-hdd" :options="$strategies"
+                        :selected="$strategies->has($defaultStrategy) ? $defaultStrategy : $strategies->keys()->first()" />
                     @auth
-                        <div class="upload-option-group">
-                            <span class="upload-option-label">相册</span>
-                            <select data-upload-album>
-                                <option value="0">不归入相册</option>
-                                @foreach($albums as $album)
-                                    <option value="{{ $album->id }}" @selected($defaultAlbum === $album->id)>{{ $album->name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
+                        <x-upload-select name="album" label="相册" icon="fa-folder" :options="$albums"
+                            :selected="$albums->has($defaultAlbum) ? $defaultAlbum : 0" />
                     @endauth
                     <fieldset class="upload-option-group upload-choice-group">
                         <legend class="upload-option-label">保留时间</legend>
@@ -105,7 +92,10 @@
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5">
                 <label class="flex items-center gap-2 text-xs font-semibold text-slate-600">链接格式
                     <select data-upload-format class="!mt-0 !w-auto !py-2 !text-xs">
-                        <option value="url">原图链接</option><option value="markdown">Markdown</option><option value="markdown_with_link">Markdown 带链接</option><option value="html">HTML</option><option value="bbcode">BBCode</option><option value="thumbnail_url">缩略图链接</option>
+                        <option value="url">图片链接</option><option value="markdown">Markdown</option><option value="markdown_with_link">Markdown 带链接</option><option value="html">HTML</option><option value="bbcode">BBCode</option><option value="thumbnail_url">缩略图链接</option>
+                        @if(in_array('heic', $extensions, true))
+                            <option value="original_url" hidden data-upload-original-format>HEIC 下载链接</option>
+                        @endif
                     </select>
                 </label>
                 <button type="button" data-upload-copy class="modern-btn modern-btn-quiet min-h-[38px] px-3 text-xs"><i class="fas fa-copy" aria-hidden="true"></i> 复制已完成链接</button>
@@ -118,6 +108,7 @@
     <template data-upload-row>
         <li class="flex flex-wrap items-start gap-3 py-3 sm:flex-nowrap">
             <img data-preview alt="" hidden width="52" height="52" class="h-12 w-12 shrink-0 rounded-xl border border-slate-200 bg-slate-50 object-cover">
+            <span data-placeholder hidden aria-hidden="true" class="upload-queue-placeholder">HEIC</span>
             <div class="min-w-[10rem] flex-1">
                 <p data-name class="break-all text-sm font-bold text-slate-800"></p>
                 <p data-state class="mt-1 text-xs text-slate-500"></p>

@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\ImagePermission;
+use App\Enums\Watermark\Mode;
+use App\Services\ImageProcessor;
 use App\Services\ImageService;
 use Illuminate\Support\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -181,7 +183,7 @@ class Image extends Model
             $markdownName = str_replace(['\\', '[', ']', "\r", "\n"], ['\\\\', '\\[', '\\]', ' ', ' '], $name);
             $markdownUrl = str_replace(['(', ')', ' '], ['%28', '%29', '%20'], $url);
 
-            return collect([
+            $links = collect([
                 'url' => $url,
                 'html' => e($html),
                 'bbcode' => "[img]{$url}[/img]",
@@ -189,6 +191,13 @@ class Image extends Model
                 'markdown_with_link' => "[![{$markdownName}]({$markdownUrl})]({$markdownUrl})",
                 'thumbnail_url' => $this->thumb_url,
             ]);
+
+            if ($this->extension === 'heic' && $this->mimetype === 'image/heic'
+                && ! app(ImageProcessor::class)->watermarkConfig($this->group?->configs ?? collect(), Mode::Dynamic)) {
+                $links->put('original_url', $url.'?download=1');
+            }
+
+            return $links;
         });
     }
 

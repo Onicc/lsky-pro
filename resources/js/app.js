@@ -12,10 +12,11 @@ import 'sweetalert2/dist/sweetalert2.min.css';
 import Alpine from 'alpinejs';
 import Sidebar from './stores/sidebar';
 import Modal from './stores/modal';
-import { mountUploader } from './uploader';
+import { mountUploader, uploadSelect } from './uploader';
 
 Alpine.store('sidebar', Sidebar);
 Alpine.store('modal', Modal);
+Alpine.data('uploadSelect', uploadSelect);
 
 window.Alpine = Alpine;
 

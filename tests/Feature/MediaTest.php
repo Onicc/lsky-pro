@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\GroupConfigKey;
 use App\Enums\ImagePermission;
+use App\Enums\Scan\NsfwJsOption;
 use App\Enums\Watermark\Mode;
 use App\Models\Group;
 use App\Models\Image;
@@ -17,6 +18,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use League\Flysystem\Config;
 use League\Flysystem\FilesystemAdapter;
 use League\Flysystem\Local\LocalFilesystemAdapter;
@@ -151,6 +153,119 @@ class MediaTest extends TestCase
             ->assertJsonPath('status', false);
 
         $this->assertDatabaseCount('images', 0);
+    }
+
+    public function test_heic_is_stored_and_downloaded_in_its_native_format_and_viewed_as_webp(): void
+    {
+        $owner = User::factory()->create()->refresh();
+        $group = $owner->group;
+        $group->configs = $group->configs->put(GroupConfigKey::ImageSaveFormat, '');
+        $group->save();
+
+        $source = base_path('tests/Fixtures/photo.heic');
+        $links = $this->actingAs($owner)->post('/upload', [
+            'file' => new UploadedFile($source, 'photo.HEIC', 'application/octet-stream', test: true),
+            'permission' => ImagePermission::Private,
+        ])->assertJsonPath('status', true)->assertJsonPath('data.mimetype', 'image/heic')->json('data.links');
+
+        $image = $owner->images()->firstOrFail();
+        $this->assertSame([72, 48, 'heic'], [$image->width, $image->height, $image->extension]);
+        $stored = $image->filesystem()->read($image->storagePath());
+        $this->assertSame('image/heic', (new \finfo(FILEINFO_MIME_TYPE))->buffer($stored));
+        $this->assertSame($image->sha256, hash('sha256', $stored));
+        $download = $this->get($links['original_url'])->assertOk()->assertHeader('Content-Type', 'image/heic');
+        $this->assertStringContainsString('attachment;', $download->headers->get('Content-Disposition'));
+        $this->assertSame($stored, $download->streamedContent());
+
+        $preview = $this->get($links['url'])->assertOk()->assertHeader('Content-Type', 'image/webp');
+        $this->assertSame([72, 48, IMAGETYPE_WEBP], array_slice(getimagesizefromstring($preview->getContent()), 0, 3));
+        $thumb = $this->get($links['thumbnail_url'])->assertOk()->assertHeader('Content-Type', 'image/webp');
+        $this->assertSame([72, 48, IMAGETYPE_WEBP], array_slice(getimagesize($thumb->baseResponse->getFile()->getPathname()), 0, 3));
+
+        Auth::guard('web')->logout();
+        foreach ([$links['original_url'], $links['url'], $links['thumbnail_url']] as $link) {
+            $this->get($link)->assertNotFound();
+        }
+    }
+
+    public function test_heic_api_respects_source_preservation_and_group_conversion(): void
+    {
+        $owner = User::factory()->create()->refresh();
+        $group = $owner->group;
+        $token = $owner->createToken('HEIC test', ['images:write'])->plainTextToken;
+        $source = base_path('tests/Fixtures/photo.heic');
+        $upload = fn () => $this->post('/api/v1/upload', [
+            'file' => new UploadedFile($source, 'photo.heic', test: true),
+        ], ['Accept' => 'application/json', 'Authorization' => 'Bearer '.$token]);
+
+        $group->configs = $group->configs->merge([
+            GroupConfigKey::ImageSaveFormat => '',
+            GroupConfigKey::ImageSaveQuality => 100,
+        ]);
+        $group->save();
+        config(['image.strip_metadata' => false]);
+
+        $key = $upload()->assertJsonPath('status', true)->assertJsonPath('data.extension', 'heic')->json('data.key');
+        $image = Image::query()->where('key', $key)->firstOrFail();
+        $this->assertSame(file_get_contents($source), $image->filesystem()->read($image->storagePath()));
+
+        $group->configs = $group->configs->put(GroupConfigKey::ImageSaveFormat, 'webp');
+        $group->save();
+        $this->app['auth']->forgetGuards();
+        $upload()->assertJsonPath('status', true)->assertJsonPath('data.extension', 'webp')
+            ->assertJsonMissingPath('data.links.original_url');
+    }
+
+    public function test_heic_rejects_wrong_content_excess_pixels_and_disallowed_groups(): void
+    {
+        $owner = User::factory()->create()->refresh();
+        $this->actingAs($owner);
+        $source = base_path('tests/Fixtures/photo.heic');
+        $upload = fn () => $this->post('/upload', ['file' => new UploadedFile($source, 'photo.heic', test: true)]);
+        $this->post('/upload', ['file' => UploadedFile::fake()->image('photo.png', 12, 12)])
+            ->assertJsonPath('status', true);
+        $this->post('/upload', ['file' => UploadedFile::fake()->createWithContent('photo.heic', 'wrong format')])
+            ->assertJsonPath('status', false);
+        config(['image.max_pixels' => 3000]);
+        $upload()->assertJsonPath('status', false)->assertJsonPath('message', '图片像素数量超出限制');
+
+        $group = $owner->group;
+        $group->configs = $group->configs->put(GroupConfigKey::AcceptedFileSuffixes, ['png']);
+        $group->save();
+        $upload()->assertJsonPath('status', false)->assertJsonPath('message', '不支持的文件类型');
+        $this->assertDatabaseCount('images', 1);
+    }
+
+    public function test_heic_is_moderated_as_jpeg_before_storage(): void
+    {
+        $owner = User::factory()->create()->refresh();
+        $group = $owner->group;
+        $url = 'https://moderation.example.test/classify';
+        $group->configs = $group->configs->merge([
+            GroupConfigKey::ImageSaveFormat => '',
+            GroupConfigKey::IsEnableScan => true,
+            GroupConfigKey::ScannedAction => 'delete',
+            GroupConfigKey::ScanConfigs => [
+                'driver' => 'nsfwjs',
+                'drivers' => ['nsfwjs' => [NsfwJsOption::ApiUrl => $url]],
+            ],
+        ]);
+        $group->save();
+        $reviewedAsJpeg = [];
+        Http::fake([$url => function ($request) use (&$reviewedAsJpeg) {
+            $body = $request->body();
+            $reviewedAsJpeg[] = str_contains($body, 'filename="photo.jpg"') && str_contains($body, "\xff\xd8\xff");
+
+            return Http::response(['hentai' => 0, 'porn' => count($reviewedAsJpeg) - 1, 'sexy' => 0]);
+        }]);
+        $source = base_path('tests/Fixtures/photo.heic');
+        $this->actingAs($owner);
+        $upload = fn () => $this->post('/upload', ['file' => new UploadedFile($source, 'photo.heic', test: true)]);
+
+        $upload()->assertJsonPath('status', true)->assertJsonPath('data.mimetype', 'image/heic');
+        $upload()->assertJsonPath('status', false)->assertJsonPath('message', '图片涉嫌违规，禁止上传');
+        $this->assertSame([true, true], $reviewedAsJpeg);
+        $this->assertDatabaseCount('images', 1);
     }
 
     public function test_private_media_and_thumbnails_require_access_and_short_shares_can_be_revoked(): void

@@ -18,6 +18,7 @@ php artisan lsky:install --no-interaction
 
 - 本地、S3、MinIO、WebDAV、SFTP、FTP、阿里云 OSS、腾讯云 COS、七牛云和又拍云策略通过统一的图片接口访问。
 - API 的 `file` 字段、v1 响应结构和 Markdown、HTML、BBCode 复制格式供上传客户端使用。新建 Token 具有有效期、设备名称和可选授权范围。
+- 支持单张 `.heic` 照片。默认按角色组的质量设置和服务端的元数据策略保存为 HEIC，浏览器通过 WebP 预览。角色组配置了转换格式时会按指定格式保存。未启用动态水印且保留了 HEIC 格式的图片，可在上传结果或图片管理中下载存储的 HEIC 文件，API 对应字段为 `links.original_url`。
 - [媒体运维文档](docs/media-operations.md)提供缩略图生成、图片删除回收和存储对账命令。
 
 ## 开发

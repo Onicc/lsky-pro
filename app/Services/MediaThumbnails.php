@@ -58,7 +58,7 @@ class MediaThumbnails
             $stream = $image->filesystem()->readStream($image->storagePath());
             try {
                 $this->processor->withPixelBudget($image->width, $image->height,
-                    fn () => $this->processor->thumbnail($stream, $settings)->save($temporaryPath),
+                    fn () => $this->processor->thumbnail($stream, $image->extension, $settings)->save($temporaryPath),
                 );
             } finally {
                 fclose($stream);

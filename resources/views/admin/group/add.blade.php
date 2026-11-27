@@ -88,7 +88,7 @@
                                 <label for="image_save_format" class="block text-sm font-medium text-gray-700">图片转换格式</label>
                                 <x-select id="configs[image_save_format]" name="configs[image_save_format]" autocomplete="image_save_format">
                                     <option value="">不转换格式</option>
-                                    @foreach($default->get('accepted_file_suffixes') as $extension)
+                                    @foreach(array_diff($default->get('accepted_file_suffixes'), ['heic']) as $extension)
                                         <option value="{{ strtolower($extension) }}">{{ strtoupper($extension) }}</option>
                                     @endforeach
                                 </x-select>

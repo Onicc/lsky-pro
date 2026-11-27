@@ -749,6 +749,11 @@
                     action: e => window.open($(e).data('json').url),
                     visible: () => ds.getSelection().length === 1,
                 },
+                downloadHeic: {
+                    text: '下载 HEIC 原图',
+                    visible: e => ds.getSelection().length === 1 && Boolean($(e).data('json').links.original_url),
+                    action: e => window.location.assign($(e).data('json').links.original_url),
+                },
                 copies: {
                     text: '复制链接',
                     subMenu: [
@@ -821,6 +826,7 @@
                     actions.copy,
                     actions.copies,
                     actions.open,
+                    actions.downloadHeic,
                     actions.movements,
                     actions.remove,
                     actions.permission,

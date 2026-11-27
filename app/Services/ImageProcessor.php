@@ -25,7 +25,7 @@ use Intervention\Image\Typography\FontFactory;
 
 class ImageProcessor
 {
-    public const SUPPORTED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'tif', 'tiff', 'bmp', 'ico', 'psd', 'webp'];
+    public const SUPPORTED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'tif', 'tiff', 'bmp', 'ico', 'psd', 'webp', 'heic'];
 
     private const LARGE_IMAGE_PIXELS = 16_000_000;
 
@@ -44,20 +44,50 @@ class ImageProcessor
 
     public function inspect(string $path, string $extension): array
     {
-        $info = @getimagesize($path);
+        if ($extension === 'heic') {
+            [$width, $height] = $this->inspectHeic($path);
+            $mime = 'image/heic';
+            $bits = 0;
+        } else {
+            $info = @getimagesize($path);
 
-        if (! $info || ! in_array($info[2], self::IMAGE_TYPES[$extension] ?? [], true)) {
-            throw new UploadException('图片内容与文件格式不一致或已损坏');
+            if (! $info || ! in_array($info[2], self::IMAGE_TYPES[$extension] ?? [], true)) {
+                throw new UploadException('图片内容与文件格式不一致或已损坏');
+            }
+
+            [$width, $height] = $info;
+            $mime = $info['mime'];
+            $bits = $info['bits'] ?? 0;
         }
 
-        [$width, $height] = $info;
         $maximumPixels = max(1, (int) config('image.max_pixels'));
 
         if ($width < 1 || $height < 1 || $width > intdiv($maximumPixels, $height)) {
             throw new UploadException('图片像素数量超出限制');
         }
 
-        return [$width, $height, $info['mime'], $info['bits'] ?? 0];
+        return [$width, $height, $mime, $bits];
+    }
+
+    private function inspectHeic(string $path): array
+    {
+        if ((new \finfo(FILEINFO_MIME_TYPE))->file($path) !== 'image/heic') {
+            throw new UploadException('图片内容与文件格式不一致或已损坏');
+        }
+
+        $native = $this->heicDecoder();
+        try {
+            $native->pingImage('HEIC:'.$path);
+            if ($native->getImageFormat() !== 'HEIC' || $native->getNumberImages() !== 1) {
+                throw new UploadException('目前仅支持单张 HEIC 照片');
+            }
+
+            return [$native->getImageWidth(), $native->getImageHeight()];
+        } catch (\ImagickException $exception) {
+            throw new UploadException('无法读取 HEIC 图片，文件可能已损坏', previous: $exception);
+        } finally {
+            $native->clear();
+        }
     }
 
     public function prepare(string $path, string $extension, Collection $configs): array
@@ -99,7 +129,7 @@ class ImageProcessor
             $this->checkGdPngMemory($width * $height);
         }
         try {
-            $image = $this->manager()->decodePath($path);
+            $image = $extension === 'heic' ? $this->decodeHeic($path) : $this->manager()->decodePath($path);
         } catch (RuntimeException $exception) {
             throw new UploadException('图片无法解码，文件可能已损坏或超出处理资源限制', previous: $exception);
         }
@@ -115,7 +145,9 @@ class ImageProcessor
             && $extension === 'png' && $target === 'png' && $strip && ! $watermark
             && $image->count() === 1 && $this->isSimplePng($path);
 
-        if (! in_array($target, self::SUPPORTED_EXTENSIONS, true) || ! ($format = Format::tryCreate($target))) {
+        $format = Format::tryCreate($target);
+        $encodeHeic = $extension === 'heic' && $target === 'heic';
+        if (! $encodeHeic && (! in_array($target, self::SUPPORTED_EXTENSIONS, true) || ! $format)) {
             throw new UploadException('配置的图片转换格式不受支持');
         }
 
@@ -132,7 +164,18 @@ class ImageProcessor
                 if ($watermark) {
                     $this->watermark($image, $watermark);
                 }
-                $image->encodeUsingFormat($format, quality: $quality, strip: $strip)->save($outputPath);
+                if ($encodeHeic) {
+                    $native = $image->core()->native();
+                    if ($strip) {
+                        $native->stripImage();
+                    }
+                    $native->setImageFormat('HEIC');
+                    $native->setCompressionQuality($quality);
+                    $native->setImageCompressionQuality($quality);
+                    $native->writeImage('HEIC:'.$outputPath);
+                } else {
+                    $image->encodeUsingFormat($format, quality: $quality, strip: $strip)->save($outputPath);
+                }
             }
         } catch (\Throwable $exception) {
             @unlink($outputPath);
@@ -234,9 +277,9 @@ class ImageProcessor
         throw new UploadException('PNG 文件不完整');
     }
 
-    public function thumbnail(mixed $stream, Collection $configs, int $maximum = 400): EncodedImageInterface
+    public function thumbnail(mixed $stream, string $extension, Collection $configs, int $maximum = 400): EncodedImageInterface
     {
-        $image = $this->manager(false)->decodeStream($stream);
+        $image = $extension === 'heic' ? $this->decodeHeic($stream) : $this->manager(false)->decodeStream($stream);
         $this->checkFrames($image);
 
         if ($watermark = $this->watermarkConfig($configs, Mode::Dynamic)) {
@@ -248,22 +291,61 @@ class ImageProcessor
 
     public function render(mixed $stream, string $extension, Collection $configs): EncodedImageInterface
     {
-        $image = $this->manager()->decodeStream($stream);
+        $image = $extension === 'heic' ? $this->decodeHeic($stream) : $this->manager()->decodeStream($stream);
         $this->checkFrames($image);
 
         if ($watermark = $this->watermarkConfig($configs, Mode::Dynamic)) {
             $this->watermark($image, $watermark);
         }
 
-        $format = in_array($extension, ['psd', 'tif', 'tiff', 'bmp'], true)
-            ? Format::PNG
-            : Format::create($extension);
+        $format = match ($extension) {
+            'heic' => Format::WEBP,
+            'psd', 'tif', 'tiff', 'bmp' => Format::PNG,
+            default => Format::create($extension),
+        };
 
         return $image->encodeUsingFormat(
             $format,
             quality: max(1, min(100, (int) $configs->get(GroupConfigKey::ImageSaveQuality, 75))),
-            strip: (bool) config('image.strip_metadata'),
+            strip: $extension === 'heic' || (bool) config('image.strip_metadata'),
         );
+    }
+
+    public function heicModerationImage(string $path, string $target): void
+    {
+        $image = $this->decodeHeic($path);
+        $this->checkFrames($image);
+        $image->scaleDown(1920, 1920)->encodeUsingFormat(Format::JPEG, quality: 85, strip: true)->save($target);
+    }
+
+    private function heicDecoder(): \Imagick
+    {
+        if (! class_exists(\Imagick::class) || ! \Imagick::queryFormats('HEIC')) {
+            throw new UploadException('服务器未安装 HEIC 处理组件');
+        }
+
+        return new \Imagick();
+    }
+
+    private function decodeHeic(mixed $source): ImageInterface
+    {
+        $native = $this->heicDecoder();
+        try {
+            if (is_resource($source)) {
+                $native->readImageFile($source, 'HEIC:source.heic');
+            } else {
+                $native->readImage('HEIC:'.$source);
+            }
+            if ($native->getImageFormat() !== 'HEIC' || $native->getNumberImages() !== 1) {
+                throw new UploadException('目前仅支持单张 HEIC 照片');
+            }
+
+            return ImageManager::usingDriver(ImagickDriver::class, decodeAnimation: false)->decode($native);
+        } catch (\ImagickException | ImageException $exception) {
+            throw new UploadException('HEIC 图片无法解码，文件可能已损坏或超出处理资源限制', previous: $exception);
+        } finally {
+            $native->clear();
+        }
     }
 
     public function watermarkConfig(Collection $configs, int $mode): ?Collection
@@ -309,7 +391,7 @@ class ImageProcessor
             $path = $this->assetPath((string) $options->get(ImageOption::Image), ['jpeg', 'jpg', 'png', 'webp']);
             $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
             $this->inspect($path, $extension);
-            $watermark = $this->manager(false)->decodePath($path);
+            $watermark = ImageManager::usingDriver($image->driver()::class, decodeAnimation: false)->decodePath($path);
             if ($angle = (int) $options->get(ImageOption::Rotate, 0)) {
                 $watermark->rotate(-$angle, Color::transparent());
             }
@@ -345,8 +427,8 @@ class ImageProcessor
         $fontPath = $this->assetPath((string) $options->get(FontOption::Font), ['ttf', 'otf']);
         $size = max(1, min(300, (int) $options->get(FontOption::Size, 50)));
         $text = mb_substr((string) $options->get(FontOption::Text, 'Lsky Pro'), 0, 100);
-        $manager = $this->manager(false);
-        $processor = $image->driver()->fontProcessor();
+        $driver = $image->driver();
+        $processor = $driver->fontProcessor();
         $font = (new FontFactory())
             ->filepath($fontPath)
             ->size($size)
@@ -354,7 +436,7 @@ class ImageProcessor
             ->color($options->get(FontOption::Color, '000000'))
             ->font();
         $box = $processor->boxSize($text, $font);
-        $watermark = $manager->createImage(max(1, $box->width() + 8), max(1, $box->height() + 8));
+        $watermark = $driver->createImage(max(1, $box->width() + 8), max(1, $box->height() + 8));
         $watermark->text($text, 4, 4, $font);
         if ($angle = (int) $options->get(FontOption::Angle, 0)) {
             $watermark->rotate(-$angle, Color::transparent());

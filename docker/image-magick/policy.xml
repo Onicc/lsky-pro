@@ -14,4 +14,5 @@
   <policy domain="path" rights="none" pattern="@*"/>
   <policy domain="coder" rights="none" pattern="*"/>
   <policy domain="coder" rights="read | write" pattern="{BMP,BMP2,BMP3,GIF,GIF87,ICO,JPEG,JPG,PNG,PNG8,PNG24,PNG32,PNG48,PNG64,PSD,TIFF,TIF,WEBP,XC,CANVAS}"/>
+  <policy domain="coder" rights="read | write" pattern="HEIC"/>
 </policymap>

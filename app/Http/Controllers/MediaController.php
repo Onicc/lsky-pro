@@ -68,7 +68,9 @@ class MediaController extends Controller
         $activeType = ! in_array($image->extension, ImageProcessor::SUPPORTED_EXTENSIONS, true);
         $dynamic = ! $activeType && ! in_array($image->extension, ['ico', 'gif'], true)
             && $processor->watermarkConfig($options, Mode::Dynamic);
-        $rasterize = in_array($image->extension, ['psd', 'tif', 'tiff', 'bmp'], true);
+        $downloadHeic = $image->extension === 'heic' && $image->mimetype === 'image/heic'
+            && ! $dynamic && $request->boolean('download');
+        $rasterize = ! $downloadHeic && in_array($image->extension, ['psd', 'tif', 'tiff', 'bmp', 'heic'], true);
 
         if ($dynamic || $rasterize) {
             try {
@@ -89,7 +91,7 @@ class MediaController extends Controller
 
         // Legacy metadata may contain an incorrect extension after a historical conversion.
         $verified = in_array($image->mimetype, ['image/jpeg', 'image/png', 'image/gif', 'image/webp',
-            'image/vnd.microsoft.icon', 'image/x-icon'], true);
+            'image/vnd.microsoft.icon', 'image/x-icon', 'image/heic'], true);
         $headers = $this->headers($activeType || ! $verified ? 'application/octet-stream' : $image->mimetype);
         $response = response()->stream(static function () use ($stream) {
             try {
@@ -99,11 +101,11 @@ class MediaController extends Controller
             }
         }, 200, $headers);
 
-        if ($activeType || ! $verified) {
+        if ($activeType || ! $verified || $downloadHeic) {
             $response->headers->set('Content-Disposition', $response->headers->makeDisposition(
                 ResponseHeaderBag::DISPOSITION_ATTACHMENT,
                 str_replace(['%', '/', '\\'], '-', basename($image->name)),
-                'image-download',
+                $downloadHeic ? 'image-download.heic' : 'image-download',
             ));
         }
 
