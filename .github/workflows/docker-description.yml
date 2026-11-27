@@ -4,7 +4,9 @@ on:
   workflow_dispatch:
   push:
     branches: [master]
-    paths: ['docs/dockerhub-overview.md']
+    paths:
+      - docs/dockerhub-overview.md
+      - .github/workflows/docker-description.yml
 
 permissions:
   contents: read
@@ -27,12 +29,21 @@ jobs:
           : "${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}"
           : "${DOCKERHUB_TOKEN:?DOCKERHUB_TOKEN is required}"
 
-          auth=$(jq -n --arg username "$DOCKERHUB_USERNAME" --arg password "$DOCKERHUB_TOKEN" \
-            '{username: $username, password: $password}' \
-            | curl --fail --silent --show-error --retry 3 \
-                -X POST 'https://hub.docker.com/v2/users/login/' \
+          auth_response="$RUNNER_TEMP/dockerhub-auth.json"
+          auth_status=$(jq -n --arg identifier "$DOCKERHUB_USERNAME" --arg secret "$DOCKERHUB_TOKEN" \
+            '{identifier: $identifier, secret: $secret}' \
+            | curl --silent --show-error --retry 3 --max-time 15 --output "$auth_response" \
+                --write-out '%{http_code}' -X POST 'https://hub.docker.com/v2/auth/token' \
                 -H 'Content-Type: application/json' --data-binary @-)
-          jwt=$(jq -er '.token' <<< "$auth")
+          if [[ "$auth_status" != 200 ]]; then
+            printf '::error title=Docker Hub authentication::Token request returned HTTP %s\n' "$auth_status"
+            exit 1
+          fi
+          if ! jwt=$(jq -er '.access_token | select(type == "string" and length > 0)' "$auth_response"); then
+            printf '::error title=Docker Hub authentication::Response did not contain an access token\n'
+            exit 1
+          fi
+          printf '::add-mask::%s\n' "$jwt"
           description='自托管图床，支持 HEIC、批量上传、外链和 S3 兼容存储。'
           jq -n --arg description "$description" --rawfile full_description docs/dockerhub-overview.md \
             '{description: $description, full_description: $full_description}' > "$RUNNER_TEMP/dockerhub-description.json"
@@ -43,7 +54,7 @@ jobs:
             "https://hub.docker.com/v2/namespaces/${DOCKERHUB_USERNAME}/repositories/lsky-pro/"; do
             status=$(curl --silent --show-error --retry 3 --output "$RUNNER_TEMP/dockerhub-response.json" \
               --write-out '%{http_code}' -X PATCH "$endpoint" \
-              -H "Authorization: JWT $jwt" \
+              -H "Authorization: Bearer $jwt" \
               -H 'Content-Type: application/json' \
               --data-binary @"$RUNNER_TEMP/dockerhub-description.json")
             printf 'Docker Hub update %s -> HTTP %s\\n' "$endpoint" "$status"
@@ -53,7 +64,7 @@ jobs:
             fi
           done
           if [[ "$updated" != true ]]; then
-            jq -c '{message,detail,errinfo}' "$RUNNER_TEMP/dockerhub-response.json" || true
+            printf '::error title=Docker Hub description::Update returned HTTP %s\n' "$status"
             exit 1
           fi
 
