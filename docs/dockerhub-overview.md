@@ -4,31 +4,31 @@
 
 ## 当前版本
 
-- 镜像：`onicc/lsky-pro:3.2.8`
+- 镜像：`onicc/lsky-pro:3.2.10`
 - 稳定别名：`onicc/lsky-pro:latest`
 - 平台：Linux amd64
 - 许可证：GPL-3.0-only
-- 当前摘要：`sha256:64fe8b793ee3f2336c20cc7e237c6664d0e87d67fb49076036fed5a425a1a170`
+- 当前摘要：`sha256:f9588875dc7c4cb98cdd0ed14065520bed4116932d2947a7f2e86880597ceb2c`
 
-`3.2.8` 和 `latest` 指向同一个正式镜像。生产环境建议固定版本标签或完整摘要。
+`3.2.10` 和 `latest` 指向同一个正式镜像。生产环境建议固定版本标签或完整摘要。
 
 ## 快速开始
 
 ```bash
 mkdir lsky-pro && cd lsky-pro
-curl -fsSLO https://raw.githubusercontent.com/Onicc/lsky-pro/v3.2.8/compose.yaml
-curl -fsSLO https://raw.githubusercontent.com/Onicc/lsky-pro/v3.2.8/docker/compose.env.example
+curl -fsSLO https://raw.githubusercontent.com/Onicc/lsky-pro/v3.2.10/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/Onicc/lsky-pro/v3.2.10/docker/compose.env.example
 mv compose.env.example .env
 ```
 
 编辑 `.env`，至少设置 `LSKY_IMAGE`、`APP_URL` 和随机生成的 `APP_KEY`。
 
 ```bash
-printf 'base64:%s\\n' "$(openssl rand -base64 32)"
+printf 'base64:%s\n' "$(openssl rand -base64 32)"
 docker compose pull
 read -rp '管理员邮箱 ' LSKY_ADMIN_EMAIL
 read -rsp '管理员密码 ' LSKY_ADMIN_PASSWORD
-printf '\\n'
+printf '\n'
 export LSKY_ADMIN_EMAIL LSKY_ADMIN_PASSWORD
 docker compose run --rm -e LSKY_ADMIN_EMAIL -e LSKY_ADMIN_PASSWORD app php artisan lsky:install --no-interaction
 unset LSKY_ADMIN_EMAIL LSKY_ADMIN_PASSWORD
@@ -44,6 +44,7 @@ curl -fsS https://your-domain.example/up
 ## 能力
 
 - 批量上传、幂等重试和逐张链接映射
+- HEIC 上传与原格式存储，网页预览和缩略图使用 WebP
 - 私有、持链接可访问和公开三种访问权限
 - 短期签名分享、私有缩略图和后台缩略图调度
 - 本地、S3、MinIO、WebDAV、SFTP、FTP、OSS、COS、七牛和又拍云策略
@@ -59,9 +60,9 @@ curl -fsS https://your-domain.example/up
 ## 文档和项目链接
 
 - [项目仓库](https://github.com/Onicc/lsky-pro)
-- [部署文档](https://github.com/Onicc/lsky-pro/blob/v3.2.8/docs/deployment.md)
-- [媒体运维](https://github.com/Onicc/lsky-pro/blob/v3.2.8/docs/media-operations.md)
-- [审计报告](https://github.com/Onicc/lsky-pro/blob/v3.2.8/docs/audit/2026-11-19-maintenance-audit.md)
+- [部署文档](https://github.com/Onicc/lsky-pro/blob/v3.2.10/docs/deployment.md)
+- [媒体运维](https://github.com/Onicc/lsky-pro/blob/v3.2.10/docs/media-operations.md)
+- [审计报告](https://github.com/Onicc/lsky-pro/blob/v3.2.10/docs/audit/2026-11-19-maintenance-audit.md)
 - [发布记录](https://github.com/Onicc/lsky-pro/releases)
 
 本镜像按全新安装基线发布。旧物理路径直链已移除。正式部署前请完成反向代理、TLS、主机补丁、数据库备份、对象存储备份和恢复演练。

@@ -2,6 +2,9 @@ name: Update Docker Hub description
 
 on:
   workflow_dispatch:
+  push:
+    branches: [master]
+    paths: ['docs/dockerhub-overview.md']
 
 permissions:
   contents: read
@@ -30,7 +33,7 @@ jobs:
                 -X POST 'https://hub.docker.com/v2/users/login/' \
                 -H 'Content-Type: application/json' --data-binary @-)
           jwt=$(jq -er '.token' <<< "$auth")
-          description='安全优先的自托管图床与图片管理服务，支持 Docker、SQLite/MySQL/PostgreSQL、S3 和 MinIO。'
+          description='自托管图床，支持 HEIC、批量上传、外链和 S3 兼容存储。'
           jq -n --arg description "$description" --rawfile full_description docs/dockerhub-overview.md \
             '{description: $description, full_description: $full_description}' > "$RUNNER_TEMP/dockerhub-description.json"
 
@@ -56,7 +59,7 @@ jobs:
 
           result=$(curl --fail --silent --show-error --retry 3 \
             "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/lsky-pro/")
-          jq -e --arg description "$description" \
-            '.description == $description and (.full_description | type == "string" and length > 1000)' \
+          jq -e --arg description "$description" --rawfile overview docs/dockerhub-overview.md \
+            '.description == $description and ((.full_description | rtrimstr("\n")) == ($overview | rtrimstr("\n")))' \
             <<< "$result" >/dev/null
           printf 'Docker Hub description updated and verified.\\n'
